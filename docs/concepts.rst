@@ -68,7 +68,10 @@ pointeurs qui naviguent dedans :
   jamais une branche en abandonnant silencieusement son historique : si la pointe actuelle de la
   branche ne fait pas partie des parents du commit, c'est refusé (dériver d'un ancien commit sans
   ``new_branch`` explicite, ou nommer ``new_branch``/``branch`` comme une branche déjà utilisée
-  ailleurs, sont tous les deux rejetés — l'équivalent du HEAD détaché de git) ;
+  ailleurs, sont tous les deux rejetés — l'équivalent du HEAD détaché de git) ; et, comme
+  ``git commit`` sans rien à committer, un commit dont le contenu est identique à la pointe
+  actuelle de sa branche est refusé (:class:`~follow.repository.NothingToCommitError`) plutôt
+  que silencieusement dupliqué ou ignoré ;
 - un **tag** est un pointeur immuable vers une expérience précise
   (:meth:`Repository.tag() <follow.repository.Repository.tag>`) — repointer un tag existant
   vers une autre expérience lève une erreur sauf ``force=True`` ; branches et tags partagent un

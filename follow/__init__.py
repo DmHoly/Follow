@@ -16,7 +16,7 @@ from .models import (
 from .quantity import Quantity
 from .rendering import render_fiche, render_log
 from .report import render_study_html
-from .repository import ExperimentBuilder, ExperimentNotFoundError, FollowError, Repository
+from .repository import ExperimentBuilder, ExperimentNotFoundError, FollowError, NothingToCommitError, Repository
 from .structure import Structure
 
 __all__ = [
@@ -28,6 +28,7 @@ __all__ = [
     "ExperimentBuilder",
     "ExperimentNotFoundError",
     "FollowError",
+    "NothingToCommitError",
     "Objective",
     "ObjectiveResult",
     "Quantity",

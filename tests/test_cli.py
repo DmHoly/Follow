@@ -327,7 +327,7 @@ def test_new_refuses_to_clobber_an_existing_draft_without_force(tmp_path, capsys
     assert json.loads(Path(draft).read_text())["intent"] == "start"  # now overwritten, deliberately
 
 
-def test_committing_the_same_unmodified_draft_twice_is_a_no_op_not_a_duplicate(tmp_path, capsys):
+def test_committing_the_same_unmodified_draft_twice_is_refused_like_git(tmp_path, capsys):
     repo_path = str(tmp_path / "repo")
     main(["init", repo_path])
     capsys.readouterr()
@@ -345,11 +345,12 @@ def test_committing_the_same_unmodified_draft_twice_is_a_no_op_not_a_duplicate(t
     assert main(["commit", draft, "--repo", repo_path]) == 0
     first_id = capsys.readouterr().out.split()[0]
 
-    # re-running commit on the exact same, unmodified file (e.g. a retried script) must not
-    # create a second, orphaned commit
-    assert main(["commit", draft, "--repo", repo_path]) == 0
-    second_id = capsys.readouterr().out.split()[0]
-    assert second_id == first_id
+    # re-running commit on the exact same, unmodified file (e.g. a retried script) is refused,
+    # like `git commit` with nothing staged - not a silent duplicate, not a silent no-op
+    assert main(["commit", draft, "--repo", repo_path]) == 1
+    err = capsys.readouterr().err
+    assert "nothing to commit" in err
+    assert first_id in err
 
     from follow import Repository
 

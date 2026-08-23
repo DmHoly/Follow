@@ -26,6 +26,18 @@ class ExperimentNotFoundError(FollowError, KeyError):
         self.ref = ref
 
 
+class NothingToCommitError(FollowError):
+    """Raised when a commit's content is identical to its target branch's current tip - the
+    same rule as `git commit` refusing with "nothing to commit, working tree clean": Follow
+    never creates a new commit that says nothing a prior one didn't already say.
+    """
+
+    def __init__(self, branch: str, tip_id: str):
+        super().__init__(f"nothing to commit: {branch!r} already points at {tip_id}, and this commit's content is identical")
+        self.branch = branch
+        self.tip_id = tip_id
+
+
 class ExperimentBuilder:
     """A mutable, in-progress experiment - the equivalent of git's working tree + index.
 
@@ -115,8 +127,9 @@ class ExperimentBuilder:
 
         Committing a *different* builder (e.g. loaded fresh from an unmodified draft file - a
         CLI command or script re-run by mistake) whose content is otherwise identical to its
-        branch's current tip is a safe no-op: you get that same tip back rather than a
-        duplicate, since :meth:`Repository._commit` checks content, not object identity.
+        branch's current tip raises :class:`NothingToCommitError` - the same rule as `git
+        commit` refusing an empty diff - rather than silently duplicating that tip or silently
+        doing nothing; :meth:`Repository._commit` checks content, not object identity.
         """
         if self._committed:
             raise FollowError(
@@ -483,15 +496,14 @@ class Repository:
         current_tip_id = self._branches.get(builder.branch)
         if current_tip_id is not None:
             current_tip = self._objects[current_tip_id]
-            # Ignoring id/created_at, is this commit identical to the branch's current tip? If
-            # so this is very likely the same commit being made again by mistake (a CLI command
-            # re-run on an unmodified draft file, a retried script...) rather than a deliberate
-            # new commit - creating one anyway would silently orphan the existing tip (it would
-            # no longer be reachable via log() once the branch moves), so treat it as a no-op
-            # and hand back the experiment that's already there instead of duplicating it.
+            # Ignoring id/created_at, is this commit identical to the branch's current tip? Then
+            # there is nothing to commit - exactly like `git commit` with no staged changes,
+            # this is refused rather than silently creating a content-duplicate commit (which
+            # would orphan the existing tip: still in the repository, but no longer reachable
+            # via log() once the branch moves past it) or silently doing nothing.
             unchanged = provisional.model_dump(mode="json", exclude={"id", "created_at"})
             if unchanged == current_tip.model_dump(mode="json", exclude={"id", "created_at"}):
-                return current_tip
+                raise NothingToCommitError(builder.branch, current_tip_id)
             # The branch has moved on since builder.parents was decided (someone else committed
             # to it, or this builder derived from something other than the current tip - e.g.
             # `derive(<an old commit>, ...)` without new_branch, git's detached-HEAD situation).

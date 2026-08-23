@@ -9,7 +9,7 @@ from pydantic import ValidationError
 
 from examples.mosfet import Layer, MOSFETStructure
 from examples.recipe import BakeStep, CakeRecipe
-from follow import ExperimentNotFoundError, FollowError, Quantity, ReferenceLink, Repository
+from follow import ExperimentNotFoundError, FollowError, NothingToCommitError, Quantity, ReferenceLink, Repository
 from follow.merging import split_path
 
 
@@ -143,15 +143,17 @@ def test_reference_link_without_a_target_is_rejected():
     ReferenceLink(role="prior_art", label="paper", external_source="doi://10.1/x")
 
 
-def test_recommitting_an_unchanged_draft_is_an_idempotent_no_op():
+def test_recommitting_an_unchanged_draft_is_refused_like_git_commit_with_nothing_staged():
     # a fresh builder (as load_draft() would produce from an unmodified file on disk) whose
-    # content exactly matches the branch tip must not create a duplicate/orphan.
+    # content exactly matches the branch tip must not create a duplicate/orphan - and, like
+    # `git commit` with nothing staged, it should refuse rather than silently doing nothing.
     repo = Repository()
     first = repo.new(branch="main", structure=_cake(), title="v1", intent="x").commit()
 
-    again = repo.new(branch="main", structure=_cake(), title="v1", intent="x", parents=[]).commit()
+    again = repo.new(branch="main", structure=_cake(), title="v1", intent="x", parents=[])
+    with pytest.raises(NothingToCommitError, match="nothing to commit"):
+        again.commit()
 
-    assert again.id == first.id
     assert len(repo) == 1
     assert repo.branches["main"] == first.id
 
