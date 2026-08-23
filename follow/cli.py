@@ -19,6 +19,7 @@ from pydantic import ValidationError
 
 from .graphing import render_graph_html
 from .rendering import render_fiche, render_log
+from .report import render_study_html
 from .repository import ExperimentNotFoundError, Repository
 from .structure import Structure
 
@@ -250,6 +251,24 @@ def cmd_graph(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_report(args: argparse.Namespace) -> int:
+    repo = _repo(args.repo)
+    if args.ref is not None and args.ref not in repo:
+        return _fail(f"No experiment, branch or tag matches {args.ref!r}")
+    for exp in repo:
+        _load_structure_class(exp.structure_type)
+    html = render_study_html(
+        repo, ref=args.ref, title=args.title, description=args.description or "", embed_plotly=not args.no_embed
+    )
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(html, encoding="utf-8")
+    print(f"Rapport écrit dans {out}")
+    if args.open:
+        webbrowser.open(out.resolve().as_uri())
+    return 0
+
+
 # -- argument parsing --------------------------------------------------------------------------
 
 
@@ -357,6 +376,18 @@ def build_parser() -> argparse.ArgumentParser:
     p_graph.add_argument("--out", default="graph.html")
     p_graph.add_argument("--open", action="store_true", help="ouvrir le fichier dans le navigateur")
     p_graph.set_defaults(func=cmd_graph)
+
+    p_report = subparsers.add_parser(
+        "report", help="générer un compte rendu d'étude complet (HTML, sans IA, dérivé du dépôt)"
+    )
+    add_repo_arg(p_report)
+    p_report.add_argument("ref", nargs="?", default=None, help="limiter au lignage d'une branche/tag/expérience (défaut: tout le dépôt)")
+    p_report.add_argument("--title", default="Compte rendu d'étude")
+    p_report.add_argument("--description")
+    p_report.add_argument("--out", default="report.html")
+    p_report.add_argument("--no-embed", action="store_true", help="utiliser le CDN Plotly au lieu de l'inclure (fichier plus léger)")
+    p_report.add_argument("--open", action="store_true", help="ouvrir le fichier dans le navigateur")
+    p_report.set_defaults(func=cmd_report)
 
     return parser
 

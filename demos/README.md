@@ -6,9 +6,14 @@ son propre dépôt en mémoire à chaque exécution — rien n'est persisté, ri
 identifiants, diffs et fiches qui apparaissent dans le HTML sont ceux produits par une vraie
 exécution de `follow`.
 
-- `_report.py` — le thème visuel partagé (jetons de couleur, typographie, composants HTML tels
-  que `.trial-card`, `.resolution-list`, `.fiche-card`) réutilisé par toutes les démos, pour
-  qu'elles se lisent comme un seul produit plutôt qu'une page ad hoc à chaque fois.
+Ces scripts assemblent leurs sections **à la main** (narration, cartes d'essai choisies,
+libellés) pour montrer ce qui est possible avec un peu de mise en récit. Pour un rapport généré
+**automatiquement**, sans rien écrire, voir `follow report` (section dédiée dans le README
+principal) et `follow.render_study_html` — qui utilisent le même thème visuel.
+
+- `_report.py` — ré-export de `follow.report` (le thème visuel et les briques HTML vivent
+  désormais dans la bibliothèque elle-même, voir plus haut) pour que ces démos et `follow
+  report` se lisent comme un seul produit plutôt que des pages ad hoc.
 - `fusion_selective.py` — une recette de gâteau à 5 étapes, une branche de test qui explore la
   cuisson (étape 3) sur 3 commits, une évolution indépendante sur `main` en parallèle, puis
   `repo.merge(...)` qui ne rapatrie que l'étape validée : la résolution de conflit chemin par
@@ -16,6 +21,10 @@ exécution de `follow`.
 - `chocolate_fondant.py` — optimisation d'une recette de fondant au chocolat cœur coulant à
   partir de 10 recettes réelles trouvées en ligne, synthétisées en une recette de référence puis
   affinées par plusieurs expériences ciblées (voir le fichier pour le détail et les sources).
+- `auto_report.py` — le même dépôt que `chocolate_fondant.py`, rendu par `render_study_html`
+  sans aucune section écrite à la main : comparez `chocolate_fondant.html` et
+  `chocolate_fondant_auto_report.html` dans `output/` pour voir la différence entre un rapport
+  automatique et une démo narrée.
 
 Régénérer une démo :
 

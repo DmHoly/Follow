@@ -7,14 +7,19 @@ from typing import Any, Iterable
 _PATH_SEGMENT = re.compile(r"([^.\[\]]+)|\[(\d+)\]")
 
 
-def _split_path(path: str) -> list[str | int]:
+def split_path(path: str) -> list[str | int]:
+    """Parse a dotted/indexed path (the format :class:`~follow.diffing.DiffEntry` uses, e.g.
+    ``"ingredients.flour"`` or ``"steps[2].parameters.temperature"``) into the sequence of
+    dict-key/list-index tokens needed to walk a dumped structure.
+    """
     tokens: list[str | int] = []
     for name, index in _PATH_SEGMENT.findall(path):
         tokens.append(int(index) if index else name)
     return tokens
 
 
-def _get(obj: Any, tokens: list[str | int]) -> Any:
+def get_path(obj: Any, tokens: list[str | int]) -> Any:
+    """Walk ``tokens`` (from :func:`split_path`) into a dumped dict/list and return the value."""
     for token in tokens:
         obj = obj[token]
     return obj
@@ -39,6 +44,6 @@ def resolve_merge_paths(ours: Any, theirs: Any, take_from_theirs: Iterable[str])
     """
     merged = copy.deepcopy(ours)
     for path in take_from_theirs:
-        tokens = _split_path(path)
-        _set(merged, tokens, copy.deepcopy(_get(theirs, tokens)))
+        tokens = split_path(path)
+        _set(merged, tokens, copy.deepcopy(get_path(theirs, tokens)))
     return merged

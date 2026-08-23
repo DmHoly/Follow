@@ -175,6 +175,34 @@ champ). Tout chemin non listé garde la valeur du premier réf (`ref_a`, la cibl
 exactement comme un hunk de `git merge` qu'on ne touche pas. Voir `Repository.merge` et
 `resolve_merge_paths` (`follow/merging.py`) côté Python.
 
+## Générer une fiche/compte rendu d'étude (`follow report`)
+
+`follow report` transforme un dépôt (ou le lignage d'une branche) en une page HTML autonome,
+lisible comme le compte rendu d'une étude complète — sans IA, sans moteur de template externe :
+tout vient des champs déjà présents dans les expériences (`follow/report.py`, pure f-strings
+Python, zéro nouvelle dépendance au-delà de Plotly déjà utilisé par `follow graph`).
+
+```bash
+follow report --repo mon_labo --title "Étude gâteau au yaourt" --out etude.html
+follow report essai-cuisson --repo mon_labo --out etude-branche.html  # limiter à une branche
+```
+
+La page contient : un sommaire cliquable, le graphe de filiation, puis une fiche par expérience
+(intention, objectifs, preuves, conclusion). Pour chaque commit, ce qui a changé est calculé —
+pas recopié à la main :
+
+- **un seul parent** → diff structure + protocole contre ce parent (`repo.diff`/`diff_steps`) ;
+- **deux parents** (fusion) → chaque chemin qui diffère entre les deux parents est comparé à la
+  valeur du commit de fusion pour dire explicitement de quel côté elle a été reprise
+  (« valeur conservée du premier parent » / « valeur reprise du second parent »), au niveau de
+  chaque feuille — plus précis qu'une note écrite à la main.
+
+Le texte issu du dépôt (titres, intentions, résumés...) est échappé avant insertion dans le
+HTML. `render_study_html(repo, ...)` est l'équivalent Python direct ; les briques visuelles
+(`fiche_card`, `trial_card`, `resolution_conflict_row`...) sont réutilisables pour composer un
+rapport sur mesure — voir `demos/` pour des exemples qui les assemblent à la main plutôt que de
+laisser `follow report` tout dériver automatiquement.
+
 ## Graphe de filiation
 
 `follow graph` (ou `render_graph_html`/`build_graph_figure` en Python) exporte le graphe complet
