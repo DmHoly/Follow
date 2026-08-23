@@ -1,4 +1,6 @@
-from follow.merging import resolve_merge_paths
+import pytest
+
+from follow.merging import get_path, resolve_merge_paths, split_path
 
 
 def test_untouched_paths_keep_ours_value():
@@ -30,3 +32,19 @@ def test_take_a_nested_field_inside_a_list_element():
     theirs = [{"name": "bake", "temp": 175, "duration": 32}]
     merged = resolve_merge_paths(ours, theirs, ["[0].temp"])
     assert merged == [{"name": "bake", "temp": 175, "duration": 35}]
+
+
+def test_empty_path_raises_a_clear_error_instead_of_indexerror():
+    with pytest.raises(ValueError, match="empty path"):
+        resolve_merge_paths({"a": 1}, {"a": 2}, [""])
+
+
+def test_split_path_and_get_path_round_trip():
+    tokens = split_path("steps[2].parameters.temperature")
+    assert tokens == ["steps", 2, "parameters", "temperature"]
+    obj = {"steps": [{}, {}, {"parameters": {"temperature": {"value": 170}}}]}
+    assert get_path(obj, tokens) == {"value": 170}
+
+
+def test_split_path_top_level_list_index():
+    assert split_path("[2]") == [2]

@@ -1,3 +1,5 @@
+import pytest
+
 from examples.recipe import BakeStep, CakeRecipe
 from follow import Quantity, Repository
 
@@ -106,3 +108,36 @@ def test_main_branch_now_points_at_the_merge_commit():
     repo, exps = _repo_with_a_selective_merge()
     assert repo.branches["main"] == exps["merged"].id
     assert repo.branches["essai-cuisson"] == exps["a3"].id
+
+
+def test_merging_a_ref_into_itself_is_rejected():
+    repo = Repository()
+    v1 = repo.new(branch="main", structure=_recipe(), title="v1", intent="start").commit()
+
+    with pytest.raises(ValueError, match="nothing to merge"):
+        repo.merge("main", "main", title="self-merge", intent="x")
+    # 'main' and v1.id resolve to the same experiment too
+    with pytest.raises(ValueError):
+        repo.merge("main", v1.id, title="self-merge", intent="x")
+
+
+def test_merge_carries_forward_ref_a_pre_existing_references():
+    repo = Repository()
+    v1 = repo.new(branch="main", structure=_recipe(), title="v1", intent="start").commit()
+
+    v2_builder = repo.new(branch="main", structure=_recipe(), title="v2", intent="x", parents=[v1.id])
+    v2_builder.add_reference(role="target_spec", label="cahier des charges", external_source="doc://spec")
+    v2 = v2_builder.commit()
+
+    branch = repo.derive(v1.id, new_branch="feature", title="feature", intent="x")
+    branch.structure.ingredients["farine"] = Quantity(value=250, unit="g")
+    feature_tip = branch.commit()
+
+    merged = repo.merge(
+        "main", feature_tip.id, title="merge", intent="x", take_structure=["ingredients.farine"]
+    ).commit()
+
+    roles = [r.role for r in merged.references]
+    assert roles.count("target_spec") == 1
+    assert roles.count("baseline") == 1  # not duplicated by the carried-forward references
+    assert any(r.role == "target_spec" and r.external_source == "doc://spec" for r in merged.references)

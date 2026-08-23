@@ -11,6 +11,11 @@ def test_domain_subclass_registers_itself():
     assert Structure.resolve(MOSFETStructure.registry_key()) is MOSFETStructure
 
 
+def test_resolve_unknown_key_raises_a_helpful_error():
+    with pytest.raises(KeyError, match="Unknown structure type.*never_registered\\.NotAClass"):
+        Structure.resolve("never_registered.NotAClass")
+
+
 def test_inheritance_adds_fields_without_touching_the_base():
     finfet = FinFETStructure(
         gate_length=Quantity(value=20, unit="nm"),

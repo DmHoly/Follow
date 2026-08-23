@@ -15,6 +15,8 @@ def _utcnow() -> datetime:
 class Objective(BaseModel):
     """One thing this experiment is trying to achieve or find out, expressed as a testable target."""
 
+    model_config = ConfigDict(frozen=True)
+
     name: str
     metric: str  # key used to look this up in Evidence.metrics / ObjectiveResult.observed
     direction: Literal["maximize", "minimize", "target", "range", "observe"] = "observe"
@@ -26,6 +28,8 @@ class Objective(BaseModel):
 
 class Step(BaseModel):
     """One step of the experimental protocol. Steps are ordered but may depend on earlier ones."""
+
+    model_config = ConfigDict(frozen=True)
 
     order: int
     name: str
@@ -43,6 +47,8 @@ class ReferenceLink(BaseModel):
     at a sibling branch, an old champion, or an external literature value.
     """
 
+    model_config = ConfigDict(frozen=True)
+
     role: Literal["baseline", "control", "prior_art", "benchmark", "target_spec", "merge_source"]
     label: str
     experiment_id: str | None = None
@@ -56,6 +62,8 @@ class Evidence(BaseModel):
     checksum so the reference can later be verified against the actual file.
     """
 
+    model_config = ConfigDict(frozen=True)
+
     id: str
     description: str
     source: str
@@ -67,6 +75,8 @@ class Evidence(BaseModel):
 class ObjectiveResult(BaseModel):
     """The verdict on one Objective, and the evidence/reasoning that supports it."""
 
+    model_config = ConfigDict(frozen=True)
+
     objective: str  # Objective.name
     status: Literal["met", "not_met", "partially_met", "inconclusive"]
     observed: Quantity | None = None
@@ -76,6 +86,8 @@ class ObjectiveResult(BaseModel):
 
 class Conclusion(BaseModel):
     """The outcome of the experiment: per-objective verdicts, a narrative, and what to do next."""
+
+    model_config = ConfigDict(frozen=True)
 
     status: Literal["draft", "running", "concluded", "abandoned"] = "draft"
     objective_results: list[ObjectiveResult] = Field(default_factory=list)

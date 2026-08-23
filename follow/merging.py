@@ -11,6 +11,10 @@ def split_path(path: str) -> list[str | int]:
     """Parse a dotted/indexed path (the format :class:`~follow.diffing.DiffEntry` uses, e.g.
     ``"ingredients.flour"`` or ``"steps[2].parameters.temperature"``) into the sequence of
     dict-key/list-index tokens needed to walk a dumped structure.
+
+    Dict keys containing a literal ``.``, ``[`` or ``]`` cannot round-trip through this format
+    (they would be misread as extra path segments) - avoid such keys in ``Structure`` fields
+    that hold a ``dict`` (e.g. ``ingredients: dict[str, Quantity]``) if you plan to merge on them.
     """
     tokens: list[str | int] = []
     for name, index in _PATH_SEGMENT.findall(path):
@@ -45,5 +49,10 @@ def resolve_merge_paths(ours: Any, theirs: Any, take_from_theirs: Iterable[str])
     merged = copy.deepcopy(ours)
     for path in take_from_theirs:
         tokens = split_path(path)
+        if not tokens:
+            raise ValueError(
+                f"cannot take the whole root object via an empty path ({path!r}); "
+                "pass explicit sub-paths (e.g. from repo.diff(...)) instead"
+            )
         _set(merged, tokens, copy.deepcopy(get_path(theirs, tokens)))
     return merged

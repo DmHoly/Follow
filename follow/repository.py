@@ -310,13 +310,17 @@ class Repository:
         manual conflict resolution: ``take_structure``/``take_steps`` list the paths (in the
         format :meth:`diff`/:meth:`diff_steps` report) whose value should come from ``ref_b``
         instead of ``ref_a``; every path you don't list keeps ``ref_a``'s value. The result gets
-        both tips as parents (so the graph records the merge like git does) plus a reference
-        back to each side (``baseline`` for ``ref_a``, ``merge_source`` for ``ref_b``).
+        both tips as parents (so the graph records the merge like git does), carries over
+        ``ref_a``'s other references (a ``target_spec`` pointer, say - the same "carry what came
+        before" behaviour as :meth:`derive`), and adds a reference back to each side (``baseline``
+        for ``ref_a``, ``merge_source`` for ``ref_b``).
 
         Both experiments must share the same ``structure_type`` - Follow does not attempt to
         reconcile two different domain schemas.
         """
         a, b = self.get(ref_a), self.get(ref_b)
+        if a.id == b.id:
+            raise ValueError(f"{ref_a!r} and {ref_b!r} both resolve to {a.id} - nothing to merge")
         structure_cls = Structure.resolve(a.structure_type)
 
         merged_structure = resolve_merge_paths(
@@ -330,6 +334,8 @@ class Repository:
             take_steps,
         )
 
+        carried_references = [r for r in a.references if r.role not in ("baseline", "merge_source")]
+
         builder = ExperimentBuilder(
             self,
             branch=branch or a.branch,
@@ -340,6 +346,7 @@ class Repository:
             author=author,
             hypothesis=hypothesis,
             objectives=a.objectives,
+            references=carried_references,
             steps=[Step.model_validate(s) for s in merged_steps],
         )
         builder.add_reference(role="baseline", experiment_id=a.id, label=f"{a.branch}: {a.title}")
