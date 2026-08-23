@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Iterator
 
+from .commit_form import CommitForm, load_commit_form
 from .diffing import StructureDiff, diff_structures
 from .ids import content_id
 from .merging import resolve_merge_paths
@@ -62,6 +63,7 @@ class ExperimentBuilder:
         steps: Iterable[Step] = (),
         tags: Iterable[str] = (),
         metadata: dict[str, Any] | None = None,
+        form_answers: dict[str, Any] | None = None,
     ) -> None:
         self.repo = repo
         self.branch = branch
@@ -78,6 +80,7 @@ class ExperimentBuilder:
         self.conclusion = Conclusion()
         self.tags: list[str] = list(tags)
         self.metadata: dict[str, Any] = dict(metadata or {})
+        self.form_answers: dict[str, Any] = dict(form_answers or {})
         self._committed = False
 
     def add_objective(self, **kwargs: Any) -> "ExperimentBuilder":
@@ -95,6 +98,15 @@ class ExperimentBuilder:
 
     def add_evidence(self, **kwargs: Any) -> "ExperimentBuilder":
         self.evidence.append(Evidence(**kwargs))
+        return self
+
+    def answer_form(self, **answers: Any) -> "ExperimentBuilder":
+        """Record answers to the repository's commit form (see :mod:`follow.commit_form`).
+        Merges into any answers already set - call it more than once to fill the form
+        incrementally. Not validated until :meth:`commit`, so a typo'd field name only shows up
+        as an error there (alongside every other problem, not just this one).
+        """
+        self.form_answers.update(answers)
         return self
 
     def conclude(self, **kwargs: Any) -> "ExperimentBuilder":
@@ -130,6 +142,11 @@ class ExperimentBuilder:
         branch's current tip raises :class:`NothingToCommitError` - the same rule as `git
         commit` refusing an empty diff - rather than silently duplicating that tip or silently
         doing nothing; :meth:`Repository._commit` checks content, not object identity.
+
+        If the repository has a commit form configured (see :mod:`follow.commit_form`),
+        :attr:`form_answers` must satisfy it - see :meth:`answer_form`. A repository with no
+        commit form configured accepts whatever ``form_answers`` were set (or none at all)
+        without validating them.
         """
         if self._committed:
             raise FollowError(
@@ -162,6 +179,7 @@ class ExperimentBuilder:
             "conclusion": self.conclusion.model_dump(mode="json"),
             "tags": self.tags,
             "metadata": self.metadata,
+            "form_answers": self.form_answers,
         }
 
 
@@ -172,13 +190,27 @@ class Repository:
 
     Pass ``path`` to persist to plain JSON files (one per experiment, plus a refs file), or
     leave it out for an in-memory repository (handy for tests and notebooks).
+
+    Pass ``commit_form`` (a path to a YAML template, or an already-loaded
+    :class:`~follow.commit_form.CommitForm`) to make answering it mandatory before any commit is
+    accepted - see :mod:`follow.commit_form`. Left unset, a persisted repository still picks up
+    ``<path>/commit_form.yml`` automatically if that file exists, so dropping one into an
+    existing repository's directory is enough to start requiring it from then on.
     """
 
-    def __init__(self, path: str | Path | None = None):
+    def __init__(self, path: str | Path | None = None, *, commit_form: str | Path | CommitForm | None = None):
         self.path = Path(path) if path is not None else None
         self._objects: dict[str, Experiment] = {}
         self._branches: dict[str, str] = {}
         self._tags: dict[str, str] = {}
+        if isinstance(commit_form, CommitForm):
+            self.commit_form: CommitForm | None = commit_form
+        elif commit_form is not None:
+            self.commit_form = load_commit_form(commit_form)
+        elif self.path is not None and (self.path / "commit_form.yml").exists():
+            self.commit_form = load_commit_form(self.path / "commit_form.yml")
+        else:
+            self.commit_form = None
         if self.path is not None and self.path.exists():
             self._load()
 
@@ -434,6 +466,7 @@ class Repository:
             steps=[Step.model_validate(s) for s in payload.get("steps", [])],
             tags=list(payload.get("tags", [])),
             metadata=dict(payload.get("metadata", {})),
+            form_answers=dict(payload.get("form_answers", {})),
         )
         builder.evidence = [Evidence.model_validate(e) for e in payload.get("evidence", [])]
         if payload.get("conclusion"):
@@ -474,6 +507,10 @@ class Repository:
                 raise ExperimentNotFoundError(reference.experiment_id)
         self._ensure_branch_name_available(builder.branch)
 
+        # a repository with a commit form configured requires every commit to answer it - the
+        # same idea as a required PR template, enforced instead of merely suggested.
+        form_answers = self.commit_form.validate_answers(builder.form_answers) if self.commit_form is not None else dict(builder.form_answers)
+
         structure_type = type(builder.structure).registry_key()
         provisional = Experiment(
             id="pending",
@@ -492,6 +529,7 @@ class Repository:
             conclusion=builder.conclusion,
             tags=builder.tags,
             metadata=builder.metadata,
+            form_answers=form_answers,
         )
         current_tip_id = self._branches.get(builder.branch)
         if current_tip_id is not None:

@@ -7,6 +7,11 @@ follow.batch.analyze_batch + follow.report.batch_table give you, on top of the s
 composition (WaferLot.wafers: list[Wafer]) Follow already supports - nothing new in the core
 engine, just a generic N-way comparison over a list field.
 
+The 25 wafers themselves are generated, not hand-written: follow.design.full_factorial crosses
+the two factors' value grids (follow.design.lin, a thin numpy.linspace wrapper) against a single
+reference Wafer, so the split is defined once as "these two factors, these ranges" rather than
+copy-pasted 25 times.
+
 A second commit runs a 5-wafer confirmation lot, all at the winning combination: analyze_batch
 reports it as uniform (no variation), the other half of the hybrid display.
 
@@ -21,41 +26,34 @@ from pathlib import Path
 from demos._report import batch_table, fiche_card, render_report
 from examples.wafer_doe import Wafer, WaferLot
 from follow import Quantity, Repository, analyze_batch
+from follow.design import full_factorial, lin
 from follow.graphing import build_graph_figure
 
-IMPLANT_DOSES_1E14 = [2, 4, 6, 8, 10]  # cm^-2, x1e14
-ANNEAL_TEMPS_C = [900, 950, 1000, 1050, 1100]
+_REFERENCE_WAFER = Wafer(
+    slot=0,
+    implant_dose=Quantity(value=0, unit="1e14 cm^-2"),
+    anneal_temperature=Quantity(value=0, unit="C"),
+    anneal_duration=Quantity(value=30, unit="min"),
+)
 
 
 def _factorial_lot() -> WaferLot:
-    wafers = []
-    slot = 1
-    for dose in IMPLANT_DOSES_1E14:
-        for temp in ANNEAL_TEMPS_C:
-            wafers.append(
-                Wafer(
-                    slot=slot,
-                    implant_dose=Quantity(value=dose, unit="1e14 cm^-2"),
-                    anneal_temperature=Quantity(value=temp, unit="C"),
-                    anneal_duration=Quantity(value=30, unit="min"),
-                )
-            )
-            slot += 1
+    wafers = full_factorial(
+        _REFERENCE_WAFER,
+        id_field="slot",
+        implant_dose=lin(2, 10, 5, unit="1e14 cm^-2"),
+        anneal_temperature=lin(900, 1100, 5, unit="C"),
+    )
     return WaferLot(lot_id="LOT-A", wafer_diameter=Quantity(value=200, unit="mm"), process="implant+anneal", wafers=wafers)
 
 
 def _confirmation_lot() -> WaferLot:
     # the winning combination from LOT-A (dose=6e14, temp=1000C), re-run on 5 wafers to confirm
-    # reproducibility - a uniform batch, on purpose.
-    wafers = [
-        Wafer(
-            slot=i + 1,
-            implant_dose=Quantity(value=6, unit="1e14 cm^-2"),
-            anneal_temperature=Quantity(value=1000, unit="C"),
-            anneal_duration=Quantity(value=30, unit="min"),
-        )
-        for i in range(5)
-    ]
+    # reproducibility - a uniform batch, on purpose: nothing to generate, just repeat it.
+    winner = _REFERENCE_WAFER.model_copy(
+        update={"implant_dose": Quantity(value=6, unit="1e14 cm^-2"), "anneal_temperature": Quantity(value=1000, unit="C")}
+    )
+    wafers = [winner.model_copy(update={"slot": i + 1}) for i in range(5)]
     return WaferLot(lot_id="LOT-B", wafer_diameter=Quantity(value=200, unit="mm"), process="implant+anneal", wafers=wafers)
 
 

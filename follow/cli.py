@@ -80,6 +80,19 @@ def _read_structure_payload(path: str) -> dict[str, Any]:
         raise SystemExit(f"{path} n'est pas un JSON valide : {exc}") from exc
 
 
+def _print_form_hint(repo: Repository) -> None:
+    """After writing a draft, tell the user up front which form fields `commit` will require -
+    otherwise the first they'd hear of the repository's commit form is a refusal at commit time.
+    """
+    if repo.commit_form is None:
+        return
+    print(f"Ce dépôt exige un formulaire de commit ({repo.commit_form.title!r}) :")
+    for field in repo.commit_form.fields:
+        marker = "requis" if field.required else "optionnel"
+        print(f"  - {field.name} ({field.type}, {marker}): {field.label}")
+    print('Remplissez "form_answers" dans le brouillon avant de committer.')
+
+
 def _write_draft(out: Path, builder: Any, *, force: bool) -> int | None:
     """Write a builder's draft JSON to ``out``, refusing to clobber an existing file unless
     ``force`` is set - re-running ``new``/``derive``/``merge`` with the same ``--out`` (e.g. by
@@ -125,6 +138,7 @@ def cmd_new(args: argparse.Namespace) -> int:
     if (failure := _write_draft(out, builder, force=args.force)) is not None:
         return failure
     print(f"Brouillon écrit dans {out}. Éditez-le puis lancez `follow commit {out}`.")
+    _print_form_hint(repo)
     return 0
 
 
@@ -155,6 +169,7 @@ def cmd_derive(args: argparse.Namespace) -> int:
     if (failure := _write_draft(out, builder, force=args.force)) is not None:
         return failure
     print(f"Brouillon dérivé de {parent.id} écrit dans {out}. Éditez-le puis lancez `follow commit {out}`.")
+    _print_form_hint(repo)
     return 0
 
 
@@ -244,6 +259,7 @@ def cmd_merge(args: argparse.Namespace) -> int:
     if (failure := _write_draft(out, builder, force=args.force)) is not None:
         return failure
     print(f"Brouillon de fusion ({a.id} + {b.id}) écrit dans {out}. Éditez-le puis lancez `follow commit {out}`.")
+    _print_form_hint(repo)
     return 0
 
 

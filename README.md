@@ -32,8 +32,9 @@ git clone https://github.com/DmHoly/Follow.git && cd Follow
 pip install -e ".[dev,docs]"
 ```
 
-Python ≥ 3.11 requis. Deux dépendances : `pydantic` (les modèles) et `plotly` (le graphe de
-filiation) — pas de Graphviz, pas de base de données, pas de moteur de template.
+Python ≥ 3.11 requis. Dépendances : `pydantic` (les modèles), `plotly` (le graphe de filiation),
+`numpy` (générateurs de plan d'expériences, `follow.design`) et `pyyaml` (formulaires de commit,
+`follow.commit_form`) — pas de Graphviz, pas de base de données, pas de moteur de template.
 
 ```python
 >>> import follow
@@ -274,6 +275,80 @@ follow explode main wafers --ignore slot --repo mon_labo --out explode.html --op
 construction sur chaque entité et empêcheraient sinon un lot réellement homogène (ex. un lot de
 confirmation) de ressortir comme uniforme. Voir `demos/wafer_doe.py` (plan factoriel 5×5 sur 25
 wafers, puis lot de confirmation) et `docs/batch.rst` côté Python.
+
+## Générer le split lui-même (`follow.design`)
+
+Pas besoin de recopier une structure de référence à la main pour chaque variante :
+`follow.design` prend une instance de référence déjà valide et un spec par facteur, et renvoie
+la liste de variantes.
+
+```python
+from follow.design import full_factorial, lin
+
+wafers = full_factorial(
+    reference,                                            # un Wafer déjà valide
+    id_field="slot",
+    implant_dose=lin(2, 10, 5, unit="1e14 cm^-2"),        # numpy.linspace, 5 valeurs
+    anneal_temperature=lin(900, 1100, 5, unit="C"),
+)  # 25 Wafer, slot numéroté 1..25 automatiquement
+```
+
+Trois générateurs de plan : `sweep` (un seul facteur varie — toujours identifiable),
+`full_factorial` (toutes les combinaisons — toujours identifiable), `latin_hypercube` (balayage
+aléatoire stratifié, pour un screening). `fractional_factorial` réduit le nombre de runs d'un
+plan à deux niveaux en dérivant certains facteurs comme produit d'autres, et calcule
+explicitement la **structure d'aliasing** qui en résulte (`result.resolution`,
+`result.aliases`) — pas de mauvaise surprise après coup sur ce qui est confondu avec quoi.
+
+Et pour l'erreur classique faite à la main — deux facteurs qu'on fait varier ensemble au lieu de
+les croiser, rendant leurs effets impossibles à séparer statistiquement —
+`check_identifiability` vérifie la corrélation entre chaque paire de facteurs sur le plan
+effectivement construit :
+
+```python
+from follow.design import check_identifiability
+
+check_identifiability(bad_split, ["implant_dose", "anneal_temperature"])
+# [("implant_dose", "anneal_temperature", 0.999...)]  <- confondus, à corriger
+```
+
+Voir `docs/design.rst`.
+
+## Formulaire de commit obligatoire
+
+Une `Structure` capture la configuration étudiée, mais pas certaines métadonnées qu'on veut
+tracer systématiquement (qui a lancé le run, si un plan croisé a été vérifié pour l'aliasing...).
+`follow.commit_form` définit ce questionnaire une fois, en YAML, et le rend **obligatoire** à
+chaque commit d'un dépôt donné :
+
+```yaml
+# commit_form.yml, déposé dans le dossier du dépôt - chargé automatiquement
+title: Formulaire de commit - Fab wafers
+fields:
+  - name: operator
+    label: Opérateur
+    type: string
+    required: true
+  - name: checked_confounding
+    label: Facteurs croisés vérifiés ?
+    type: boolean
+    required: true
+```
+
+```python
+repo = Repository("mon_labo")   # charge mon_labo/commit_form.yml s'il existe
+
+builder = repo.new(branch="main", structure=lot, title="LOT-A", intent="...")
+builder.answer_form(operator="Alice", checked_confounding=True)
+builder.commit()   # lève FormValidationError (liste tous les problèmes) si une réponse manque/est invalide
+```
+
+Un dépôt sans formulaire configuré n'exige rien. `follow new`/`derive`/`merge` affichent les
+champs requis dès l'écriture du brouillon quand un formulaire est configuré ; les réponses se
+remplissent dans la clé `form_answers` du brouillon avant `follow commit`. Les types de champ
+(`string`, `text`, `number`, `boolean`, `choice`) sont pensés pour piloter, plus tard, un vrai
+formulaire d'interface plutôt que seulement valider du texte. Voir
+`examples/wafer_doe_commit_form.yml` et `docs/commit_form.rst`.
 
 ## Générer une fiche/compte rendu d'étude (`follow report`)
 

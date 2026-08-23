@@ -67,6 +67,18 @@ follow.batch
 .. automodule:: follow.batch
    :members:
 
+follow.design
+----------------
+
+.. automodule:: follow.design
+   :members:
+
+follow.commit_form
+----------------------
+
+.. automodule:: follow.commit_form
+   :members:
+
 follow.ids
 -------------
 

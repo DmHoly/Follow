@@ -50,6 +50,12 @@ Concepts
    * - :func:`~follow.batch.analyze_batch`
      - Une expérience, N variantes structurelles (DOE) : sépare la base commune des facteurs qui varient.
      - — (pas d'équivalent git)
+   * - :func:`~follow.design.full_factorial`
+     - Génère les variantes d'un split (DOE) depuis une structure de référence, sans les recopier à la main.
+     - — (pas d'équivalent git)
+   * - :class:`~follow.commit_form.CommitForm`
+     - Questionnaire YAML obligatoire à chaque commit d'un dépôt donné.
+     - un modèle de PR obligatoire
 
 .. toctree::
    :maxdepth: 2
@@ -59,6 +65,8 @@ Concepts
    concepts
    merging
    batch
+   design
+   commit_form
    report
    cli
 

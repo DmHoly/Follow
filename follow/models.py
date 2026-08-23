@@ -138,6 +138,9 @@ class Experiment(BaseModel):
 
     tags: list[str] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
+    # answers to the repository's commit form (follow.commit_form), if one was configured -
+    # validated at commit time, unlike `metadata` which is never checked against anything.
+    form_answers: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def _check_objective_results_reference_real_objectives(self) -> "Experiment":

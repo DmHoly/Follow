@@ -77,3 +77,6 @@ ressort ``is_uniform``.
 ``follow explode <ref> <chemin>`` accepte n'importe quel champ liste de la structure de
 l'expérience visée ; ``--ignore`` est répétable, et ``--out`` produit la même page thémée que
 ``follow report``/``follow graph`` plutôt qu'un résumé texte.
+
+Voir :doc:`design` pour générer les 25 entités elles-mêmes (factoriel complet, fractionnaire,
+balayage, LHS) au lieu de les écrire à la main — c'est ce que fait ``demos/wafer_doe.py``.

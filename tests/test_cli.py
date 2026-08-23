@@ -508,3 +508,34 @@ def test_explode_on_an_unknown_field_fails_clearly(tmp_path, capsys):
     assert main(["explode", "main", "does_not_exist", "--repo", repo_path]) == 1
     err = capsys.readouterr().err
     assert "does_not_exist" in err
+
+
+def test_new_prints_a_hint_when_the_repository_has_a_commit_form(tmp_path, capsys):
+    repo_path = str(tmp_path / "repo")
+    main(["init", repo_path])
+    capsys.readouterr()
+    Path(repo_path, "commit_form.yml").write_text(
+        "title: Formulaire de commit\nfields:\n  - name: operator\n    label: Opérateur\n    type: string\n    required: true\n"
+    )
+
+    struct_file = _write_json(tmp_path / "cake.json", CAKE_STRUCT)
+    draft = str(tmp_path / "draft.json")
+    main(
+        [
+            "new", "--repo", repo_path, "--branch", "main", "--title", "v1", "--intent", "start",
+            "--structure-type", "examples.recipe.CakeRecipe", "--structure-file", struct_file, "--out", draft,
+        ]
+    )
+    out = capsys.readouterr().out
+    assert "Formulaire de commit" in out
+    assert "operator" in out
+
+    # committing without filling form_answers is refused with every problem listed
+    assert main(["commit", draft, "--repo", repo_path]) == 1
+    err = capsys.readouterr().err
+    assert "operator" in err
+
+    payload = json.loads(Path(draft).read_text())
+    payload["form_answers"] = {"operator": "Alice"}
+    Path(draft).write_text(json.dumps(payload))
+    assert main(["commit", draft, "--repo", repo_path]) == 0
