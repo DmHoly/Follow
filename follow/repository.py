@@ -66,6 +66,7 @@ class ExperimentBuilder:
         self.conclusion = Conclusion()
         self.tags: list[str] = list(tags)
         self.metadata: dict[str, Any] = dict(metadata or {})
+        self._committed = False
 
     def add_objective(self, **kwargs: Any) -> "ExperimentBuilder":
         self.objectives.append(Objective(**kwargs))
@@ -103,7 +104,24 @@ class ExperimentBuilder:
         return diff_structures(parent_structure, self.structure)
 
     def commit(self) -> Experiment:
-        return self.repo._commit(self)
+        """Freeze this builder into an immutable :class:`Experiment`.
+
+        A builder can only be committed once: committing, then continuing to edit the same
+        builder and committing again does *not* amend the first commit (Follow has no amend -
+        commits are immutable) - it silently produces a sibling with the same parent, leaving
+        the first commit orphaned (still in the repository, but unreachable from the branch tip
+        via :meth:`Repository.log`). To avoid that footgun, a second call raises; derive a new
+        builder from the result instead.
+        """
+        if self._committed:
+            raise FollowError(
+                "this ExperimentBuilder was already committed - editing and recommitting it does "
+                "not amend the previous commit, it creates an orphaned sibling; call "
+                "repo.derive(<the id you got back>, ...) to continue instead"
+            )
+        experiment = self.repo._commit(self)
+        self._committed = True
+        return experiment
 
     def to_draft(self) -> dict[str, Any]:
         """Dump this builder to a plain JSON-able dict: the "working tree" file a CLI user
@@ -177,6 +195,25 @@ class Repository:
         if ref in self._objects:
             return ref
         raise ExperimentNotFoundError(ref)
+
+    def _ensure_branch_name_available(self, name: str) -> None:
+        """Branches and tags share one namespace: resolving a ref checks branches first, so a
+        branch silently shadowing a same-named tag would make that tag unreachable by name with
+        no warning. Only a genuinely new branch name is checked - continuing an existing branch
+        is always fine.
+        """
+        if name not in self._branches and name in self._tags:
+            raise FollowError(f"{name!r} is already a tag; branch and tag names share one namespace and must not collide")
+
+    def _ensure_tag_assignment(self, name: str, target_id: str, *, force: bool) -> None:
+        if name not in self._tags and name in self._branches:
+            raise FollowError(f"{name!r} is already a branch; branch and tag names share one namespace and must not collide")
+        existing = self._tags.get(name)
+        if existing is not None and existing != target_id and not force:
+            raise FollowError(
+                f"tag {name!r} already points at {existing} - tags are immutable; "
+                "pass force=True to repo.tag(...) to repoint it deliberately"
+            )
 
     def get(self, ref: str) -> Experiment:
         """Resolve a branch name, tag name, or experiment id to its Experiment."""
@@ -316,11 +353,17 @@ class Repository:
         for ``ref_a``, ``merge_source`` for ``ref_b``).
 
         Both experiments must share the same ``structure_type`` - Follow does not attempt to
-        reconcile two different domain schemas.
+        reconcile two different domain schemas, and raises rather than silently producing a
+        merge commit that mixes two unrelated domains.
         """
         a, b = self.get(ref_a), self.get(ref_b)
         if a.id == b.id:
             raise ValueError(f"{ref_a!r} and {ref_b!r} both resolve to {a.id} - nothing to merge")
+        if a.structure_type != b.structure_type:
+            raise ValueError(
+                f"cannot merge {ref_a!r} ({a.structure_type}) with {ref_b!r} ({b.structure_type}): "
+                "different structure types - Follow does not reconcile different domain schemas"
+            )
         structure_cls = Structure.resolve(a.structure_type)
 
         merged_structure = resolve_merge_paths(
@@ -381,17 +424,31 @@ class Repository:
 
     def branch(self, name: str, at: str) -> None:
         """Point branch ``name`` at the experiment resolved by ``at`` (id, branch, or tag)."""
-        self._branches[name] = self._resolve_ref(at)
+        resolved = self._resolve_ref(at)
+        self._ensure_branch_name_available(name)
+        self._branches[name] = resolved
         if self.path is not None:
             self._persist_refs()
 
-    def tag(self, name: str, at: str) -> None:
-        """Point tag ``name`` (an immutable label) at the experiment resolved by ``at``."""
-        self._tags[name] = self._resolve_ref(at)
+    def tag(self, name: str, at: str, *, force: bool = False) -> None:
+        """Point tag ``name`` (an immutable label) at the experiment resolved by ``at``.
+
+        Raises if ``name`` already tags a *different* experiment - tags are meant to be a
+        stable, citable reference, so silently repointing one defeats the point. Pass
+        ``force=True`` if you deliberately want to move it anyway.
+        """
+        resolved = self._resolve_ref(at)
+        self._ensure_tag_assignment(name, resolved, force=force)
+        self._tags[name] = resolved
         if self.path is not None:
             self._persist_refs()
 
     def _commit(self, builder: ExperimentBuilder) -> Experiment:
+        for parent_id in builder.parents:
+            if parent_id not in self._objects:
+                raise ExperimentNotFoundError(parent_id)
+        self._ensure_branch_name_available(builder.branch)
+
         structure_type = type(builder.structure).registry_key()
         provisional = Experiment(
             id="pending",
@@ -413,6 +470,9 @@ class Repository:
         )
         payload = provisional.model_dump(mode="json", exclude={"id"})
         experiment = provisional.model_copy(update={"id": content_id("experiment", payload)})
+
+        for tag in experiment.tags:
+            self._ensure_tag_assignment(tag, experiment.id, force=False)
 
         self._objects[experiment.id] = experiment
         self._branches[experiment.branch] = experiment.id

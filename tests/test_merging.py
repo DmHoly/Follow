@@ -39,6 +39,22 @@ def test_empty_path_raises_a_clear_error_instead_of_indexerror():
         resolve_merge_paths({"a": 1}, {"a": 2}, [""])
 
 
+def test_path_missing_on_theirs_names_the_full_path():
+    with pytest.raises(KeyError, match="b.c.*taken from"):
+        resolve_merge_paths({"a": 1}, {"a": 2}, ["b.c"])
+
+
+def test_path_missing_on_ours_names_the_full_path():
+    # "b.c" exists on theirs but ours has no "b" container at all to set it into
+    with pytest.raises(KeyError, match="b.c.*kept"):
+        resolve_merge_paths({"a": 1}, {"a": 2, "b": {"c": 3}}, ["b.c"])
+
+
+def test_malformed_path_is_rejected_with_position():
+    with pytest.raises(ValueError, match="malformed path"):
+        split_path("steps[2.temperature")
+
+
 def test_split_path_and_get_path_round_trip():
     tokens = split_path("steps[2].parameters.temperature")
     assert tokens == ["steps", 2, "parameters", "temperature"]

@@ -4,7 +4,7 @@ import copy
 import re
 from typing import Any, Iterable
 
-_PATH_SEGMENT = re.compile(r"([^.\[\]]+)|\[(\d+)\]")
+_TOKEN = re.compile(r"\.?([^.\[\]]+)|\[(\d+)\]")
 
 
 def split_path(path: str) -> list[str | int]:
@@ -15,10 +15,20 @@ def split_path(path: str) -> list[str | int]:
     Dict keys containing a literal ``.``, ``[`` or ``]`` cannot round-trip through this format
     (they would be misread as extra path segments) - avoid such keys in ``Structure`` fields
     that hold a ``dict`` (e.g. ``ingredients: dict[str, Quantity]``) if you plan to merge on them.
+
+    Raises :class:`ValueError` on a malformed path (e.g. a non-numeric index like
+    ``"steps[abc]"``) rather than silently misreading it as something else - a wrong path here
+    would otherwise merge or diff the wrong value with no indication anything went wrong.
     """
     tokens: list[str | int] = []
-    for name, index in _PATH_SEGMENT.findall(path):
-        tokens.append(int(index) if index else name)
+    pos = 0
+    while pos < len(path):
+        match = _TOKEN.match(path, pos)
+        if match is None:
+            raise ValueError(f"malformed path {path!r}: unexpected {path[pos:pos + 20]!r} at position {pos}")
+        name, index = match.groups()
+        tokens.append(int(index) if index is not None else name)
+        pos = match.end()
     return tokens
 
 
@@ -44,7 +54,9 @@ def resolve_merge_paths(ours: Any, theirs: Any, take_from_theirs: Iterable[str])
     This is Follow's conflict-resolution primitive: nothing is guessed automatically, every
     path you don't list keeps the ``ours`` value, exactly like an untouched hunk in a git merge.
     A path's parent container must already exist in both sides (a leaf can be new, e.g. a key
-    only ``theirs`` has, but a whole new branch of the tree cannot be conjured up).
+    only ``theirs`` has, but a whole new branch of the tree cannot be conjured up) - a path that
+    doesn't exist on either side raises with the full path in the message, not just the segment
+    that failed.
     """
     merged = copy.deepcopy(ours)
     for path in take_from_theirs:
@@ -54,5 +66,12 @@ def resolve_merge_paths(ours: Any, theirs: Any, take_from_theirs: Iterable[str])
                 f"cannot take the whole root object via an empty path ({path!r}); "
                 "pass explicit sub-paths (e.g. from repo.diff(...)) instead"
             )
-        _set(merged, tokens, copy.deepcopy(get_path(theirs, tokens)))
+        try:
+            value = get_path(theirs, tokens)
+        except (KeyError, IndexError, TypeError) as exc:
+            raise KeyError(f"path {path!r} not found on the side being taken from: {exc}") from exc
+        try:
+            _set(merged, tokens, copy.deepcopy(value))
+        except (KeyError, IndexError, TypeError) as exc:
+            raise KeyError(f"path {path!r} not found on the side being kept: {exc}") from exc
     return merged

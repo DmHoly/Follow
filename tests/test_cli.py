@@ -231,3 +231,67 @@ def test_merge_via_cli_selects_a_single_step_from_the_test_branch(tmp_path, caps
     assert merged.steps[2].parameters["temperature"].value == 185
     assert merged.steps[0].name == "Mix"
     assert repo.branches["main"] == merge_id
+
+
+def test_cli_reports_a_clean_error_instead_of_a_traceback_on_tag_repoint(tmp_path, capsys):
+    repo_path = str(tmp_path / "repo")
+    main(["init", repo_path])
+    capsys.readouterr()
+
+    struct_file = _write_json(tmp_path / "cake.json", CAKE_STRUCT)
+    draft = str(tmp_path / "v1.json")
+    main(
+        [
+            "new", "--repo", repo_path, "--branch", "main", "--title", "v1", "--intent", "start",
+            "--structure-type", "examples.recipe.CakeRecipe", "--structure-file", struct_file, "--out", draft,
+        ]
+    )
+    capsys.readouterr()
+    main(["commit", draft, "--repo", repo_path])
+    v1_id = capsys.readouterr().out.split()[0]
+
+    assert main(["tag", "release", "--at", v1_id, "--repo", repo_path]) == 0
+    capsys.readouterr()
+
+    derive_draft = str(tmp_path / "v2.json")
+    main(["derive", v1_id, "--repo", repo_path, "--title", "v2", "--intent", "x", "--out", derive_draft])
+    capsys.readouterr()
+    main(["commit", derive_draft, "--repo", repo_path])
+    v2_id = capsys.readouterr().out.split()[0]
+
+    # repointing without --force is a clean, single-line CLI error, not a traceback
+    assert main(["tag", "release", "--at", v2_id, "--repo", repo_path]) == 1
+    err = capsys.readouterr().err
+    assert err.startswith("erreur:")
+    assert "immutable" in err
+    assert "Traceback" not in err
+
+    # --force is the documented escape hatch
+    assert main(["tag", "release", "--at", v2_id, "--repo", repo_path, "--force"]) == 0
+
+
+def test_cli_reports_a_clean_error_on_branch_tag_namespace_collision(tmp_path, capsys):
+    repo_path = str(tmp_path / "repo")
+    main(["init", repo_path])
+    capsys.readouterr()
+
+    struct_file = _write_json(tmp_path / "cake.json", CAKE_STRUCT)
+    draft = str(tmp_path / "v1.json")
+    main(
+        [
+            "new", "--repo", repo_path, "--branch", "main", "--title", "v1", "--intent", "start",
+            "--structure-type", "examples.recipe.CakeRecipe", "--structure-file", struct_file, "--out", draft,
+        ]
+    )
+    capsys.readouterr()
+    main(["commit", draft, "--repo", repo_path])
+    v1_id = capsys.readouterr().out.split()[0]
+
+    main(["tag", "same-name", "--at", v1_id, "--repo", repo_path])
+    capsys.readouterr()
+
+    assert main(["branch", "same-name", "--at", v1_id, "--repo", repo_path]) == 1
+    err = capsys.readouterr().err
+    assert err.startswith("erreur:")
+    assert "namespace" in err
+    assert "Traceback" not in err

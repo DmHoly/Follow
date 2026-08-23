@@ -21,7 +21,7 @@ from . import __version__
 from .graphing import render_graph_html
 from .rendering import render_fiche, render_log
 from .report import render_study_html
-from .repository import ExperimentNotFoundError, Repository
+from .repository import FollowError, Repository
 from .structure import Structure
 
 DEFAULT_REPO = ".follow"
@@ -100,7 +100,7 @@ def cmd_derive(args: argparse.Namespace) -> int:
     repo = _repo(args.repo)
     try:
         parent = repo.get(args.ref)
-    except ExperimentNotFoundError as exc:
+    except FollowError as exc:
         return _fail(str(exc))
 
     structure_type = args.structure_type or parent.structure_type
@@ -132,7 +132,7 @@ def cmd_commit(args: argparse.Namespace) -> int:
         _load_structure_class(payload["structure_type"])
         builder = repo.load_draft(payload)
         experiment = builder.commit()
-    except (ValidationError, KeyError, ValueError) as exc:
+    except (ValidationError, FollowError, KeyError, ValueError) as exc:
         return _fail(str(exc))
     print(f"{experiment.id}  ({experiment.branch})  {experiment.title}")
     return 0
@@ -142,7 +142,7 @@ def cmd_log(args: argparse.Namespace) -> int:
     repo = _repo(args.repo)
     try:
         history = repo.log(args.ref)
-    except ExperimentNotFoundError as exc:
+    except FollowError as exc:
         return _fail(str(exc))
     for exp in history[: args.number]:
         print(f"{exp.id}  ({exp.branch})  {exp.title}  [{exp.conclusion.status}]")
@@ -153,7 +153,7 @@ def cmd_show(args: argparse.Namespace) -> int:
     repo = _repo(args.repo)
     try:
         experiment = repo.get(args.ref)
-    except ExperimentNotFoundError as exc:
+    except FollowError as exc:
         return _fail(str(exc))
     _load_structure_class(experiment.structure_type)
     for reference in experiment.references:
@@ -167,7 +167,7 @@ def cmd_diff(args: argparse.Namespace) -> int:
     repo = _repo(args.repo)
     try:
         a, b = repo.get(args.ref_a), repo.get(args.ref_b)
-    except ExperimentNotFoundError as exc:
+    except FollowError as exc:
         return _fail(str(exc))
     if args.steps:
         diff = repo.diff_steps(args.ref_a, args.ref_b)
@@ -187,7 +187,7 @@ def cmd_merge(args: argparse.Namespace) -> int:
     repo = _repo(args.repo)
     try:
         a, b = repo.get(args.ref_a), repo.get(args.ref_b)
-    except ExperimentNotFoundError as exc:
+    except FollowError as exc:
         return _fail(str(exc))
     _load_structure_class(a.structure_type)
     _load_structure_class(b.structure_type)
@@ -203,8 +203,8 @@ def cmd_merge(args: argparse.Namespace) -> int:
             author=args.author,
             hypothesis=args.hypothesis,
         )
-    except (KeyError, IndexError, TypeError) as exc:
-        return _fail(f"chemin de fusion invalide: {exc}")
+    except (FollowError, ValueError, KeyError, IndexError, TypeError) as exc:
+        return _fail(str(exc))
     out = Path(args.out)
     out.write_text(json.dumps(builder.to_draft(), indent=2, ensure_ascii=False))
     print(f"Brouillon de fusion ({a.id} + {b.id}) écrit dans {out}. Éditez-le puis lancez `follow commit {out}`.")
@@ -221,7 +221,7 @@ def cmd_branch(args: argparse.Namespace) -> int:
         return _fail("--at <ref> est requis pour créer/déplacer une branche")
     try:
         repo.branch(args.name, args.at)
-    except ExperimentNotFoundError as exc:
+    except FollowError as exc:
         return _fail(str(exc))
     print(f"branche '{args.name}' -> {repo.get(args.name).id}")
     return 0
@@ -236,8 +236,8 @@ def cmd_tag(args: argparse.Namespace) -> int:
     if args.at is None:
         return _fail("--at <ref> est requis pour créer un tag")
     try:
-        repo.tag(args.name, args.at)
-    except ExperimentNotFoundError as exc:
+        repo.tag(args.name, args.at, force=args.force)
+    except FollowError as exc:
         return _fail(str(exc))
     print(f"tag '{args.name}' -> {repo.get(args.name).id}")
     return 0
@@ -371,6 +371,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_repo_arg(p_tag)
     p_tag.add_argument("name", nargs="?")
     p_tag.add_argument("--at", help="id/branche/tag à pointer")
+    p_tag.add_argument("--force", action="store_true", help="repointer un tag existant (les tags sont immuables par défaut)")
     p_tag.set_defaults(func=cmd_tag)
 
     p_graph = subparsers.add_parser("graph", help="exporter le graphe de filiation (HTML Plotly)")

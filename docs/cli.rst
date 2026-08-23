@@ -115,6 +115,14 @@ structure.
 
 Sans argument : liste les branches/tags. Avec un nom : crée ou déplace, ``--at REF`` requis.
 
+Branches et tags partagent un seul espace de noms : créer une branche du même nom qu'un tag
+existant (ou l'inverse) est refusé plutôt que de silencieusement rendre l'un des deux
+inaccessible par ce nom.
+
+Les tags sont **immuables** : ``follow tag`` refuse de repointer un tag déjà existant vers une
+autre expérience, sauf avec ``--force`` (répéter le même ``--at`` est sans effet, pas besoin de
+``--force``). Les branches restent mutables par nature, aucun flag nécessaire pour les déplacer.
+
 ``follow graph``
 -------------------
 

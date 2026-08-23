@@ -66,7 +66,9 @@ pointeurs qui naviguent dedans :
 - une **branche** est un pointeur mutable vers la dernière expérience d'une ligne de travail
   (:meth:`Repository.branch() <follow.repository.Repository.branch>`) ;
 - un **tag** est un pointeur immuable vers une expérience précise
-  (:meth:`Repository.tag() <follow.repository.Repository.tag>`) ;
+  (:meth:`Repository.tag() <follow.repository.Repository.tag>`) — repointer un tag existant
+  vers une autre expérience lève une erreur sauf ``force=True`` ; branches et tags partagent un
+  seul espace de noms (créer l'un du nom de l'autre existant est refusé) ;
 - :meth:`Repository.log() <follow.repository.Repository.log>` remonte l'historique en
   premier-parent, comme ``git log`` ;
 - :meth:`Repository.graph() <follow.repository.Repository.graph>` donne le graphe de filiation
