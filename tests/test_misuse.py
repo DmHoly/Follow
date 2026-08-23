@@ -5,10 +5,11 @@ silent problem before the corresponding fix.
 """
 
 import pytest
+from pydantic import ValidationError
 
 from examples.mosfet import Layer, MOSFETStructure
 from examples.recipe import BakeStep, CakeRecipe
-from follow import ExperimentNotFoundError, FollowError, Quantity, Repository
+from follow import ExperimentNotFoundError, FollowError, Quantity, ReferenceLink, Repository
 from follow.merging import split_path
 
 
@@ -121,3 +122,44 @@ def test_merge_path_not_found_names_the_full_path_not_just_the_missing_key():
 
     with pytest.raises(KeyError, match="ingredients.typo"):
         repo.merge("main", tip.id, title="m", intent="x", take_structure=["ingredients.typo"]).commit()
+
+
+def test_objective_result_referencing_an_unknown_objective_is_rejected():
+    repo = Repository()
+    builder = repo.new(branch="main", structure=_cake(), title="v1", intent="x")
+    builder.add_objective(name="Rise", metric="height_cm", direction="maximize", target=5.0)
+    builder.conclude(status="concluded", objective_results=[{"objective": "Ryse", "status": "met"}])  # typo
+
+    with pytest.raises(ValidationError, match="Ryse"):
+        builder.commit()
+
+
+def test_reference_link_without_a_target_is_rejected():
+    with pytest.raises(ValidationError, match="needs a target"):
+        ReferenceLink(role="baseline", label="empty")
+
+    # either target on its own is fine
+    ReferenceLink(role="baseline", label="internal", experiment_id="exp_abc")
+    ReferenceLink(role="prior_art", label="paper", external_source="doi://10.1/x")
+
+
+def test_recommitting_an_unchanged_draft_is_an_idempotent_no_op():
+    # a fresh builder (as load_draft() would produce from an unmodified file on disk) whose
+    # content exactly matches the branch tip must not create a duplicate/orphan.
+    repo = Repository()
+    first = repo.new(branch="main", structure=_cake(), title="v1", intent="x").commit()
+
+    again = repo.new(branch="main", structure=_cake(), title="v1", intent="x", parents=[]).commit()
+
+    assert again.id == first.id
+    assert len(repo) == 1
+    assert repo.branches["main"] == first.id
+
+
+def test_a_genuinely_different_commit_on_the_same_branch_is_not_treated_as_a_no_op():
+    repo = Repository()
+    v1 = repo.new(branch="main", structure=_cake(), title="v1", intent="x").commit()
+    v2 = repo.derive(v1.id, title="v2", intent="different").commit()
+
+    assert v2.id != v1.id
+    assert len(repo) == 2

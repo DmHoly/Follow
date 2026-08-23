@@ -63,6 +63,18 @@ def _read_structure_payload(path: str) -> dict[str, Any]:
     return json.loads(Path(path).read_text())
 
 
+def _write_draft(out: Path, builder: Any, *, force: bool) -> int | None:
+    """Write a builder's draft JSON to ``out``, refusing to clobber an existing file unless
+    ``force`` is set - re-running ``new``/``derive``/``merge`` with the same ``--out`` (e.g. by
+    mistake, or a retried script) would otherwise silently overwrite hand-edited work in
+    progress with no way to get it back.
+    """
+    if out.exists() and not force:
+        return _fail(f"{out} existe déjà - passez --force pour l'écraser, ou choisissez un autre --out")
+    out.write_text(json.dumps(builder.to_draft(), indent=2, ensure_ascii=False))
+    return None
+
+
 # -- subcommands --------------------------------------------------------------------------
 
 
@@ -91,7 +103,8 @@ def cmd_new(args: argparse.Namespace) -> int:
         hypothesis=args.hypothesis,
     )
     out = Path(args.out)
-    out.write_text(json.dumps(builder.to_draft(), indent=2, ensure_ascii=False))
+    if (failure := _write_draft(out, builder, force=args.force)) is not None:
+        return failure
     print(f"Brouillon écrit dans {out}. Éditez-le puis lancez `follow commit {out}`.")
     return 0
 
@@ -120,7 +133,8 @@ def cmd_derive(args: argparse.Namespace) -> int:
         hypothesis=args.hypothesis,
     )
     out = Path(args.out)
-    out.write_text(json.dumps(builder.to_draft(), indent=2, ensure_ascii=False))
+    if (failure := _write_draft(out, builder, force=args.force)) is not None:
+        return failure
     print(f"Brouillon dérivé de {parent.id} écrit dans {out}. Éditez-le puis lancez `follow commit {out}`.")
     return 0
 
@@ -206,7 +220,8 @@ def cmd_merge(args: argparse.Namespace) -> int:
     except (FollowError, ValueError, KeyError, IndexError, TypeError) as exc:
         return _fail(str(exc))
     out = Path(args.out)
-    out.write_text(json.dumps(builder.to_draft(), indent=2, ensure_ascii=False))
+    if (failure := _write_draft(out, builder, force=args.force)) is not None:
+        return failure
     print(f"Brouillon de fusion ({a.id} + {b.id}) écrit dans {out}. Éditez-le puis lancez `follow commit {out}`.")
     return 0
 
@@ -295,6 +310,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_new.add_argument("--author")
     p_new.add_argument("--hypothesis")
     p_new.add_argument("--out", default="draft.json")
+    p_new.add_argument("--force", action="store_true", help="écraser --out s'il existe déjà")
     p_new.set_defaults(func=cmd_new)
 
     p_derive = subparsers.add_parser("derive", help="dériver un brouillon depuis une expérience existante")
@@ -308,6 +324,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_derive.add_argument("--author")
     p_derive.add_argument("--hypothesis")
     p_derive.add_argument("--out", default="draft.json")
+    p_derive.add_argument("--force", action="store_true", help="écraser --out s'il existe déjà")
     p_derive.set_defaults(func=cmd_derive)
 
     p_merge = subparsers.add_parser("merge", help="fusionner deux lignes de travail (git merge)")
@@ -336,6 +353,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_merge.add_argument("--author")
     p_merge.add_argument("--hypothesis")
     p_merge.add_argument("--out", default="draft.json")
+    p_merge.add_argument("--force", action="store_true", help="écraser --out s'il existe déjà")
     p_merge.set_defaults(func=cmd_merge)
 
     p_commit = subparsers.add_parser("commit", help="figer un brouillon dans le dépôt")

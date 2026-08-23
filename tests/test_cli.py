@@ -295,3 +295,61 @@ def test_cli_reports_a_clean_error_on_branch_tag_namespace_collision(tmp_path, c
     assert err.startswith("erreur:")
     assert "namespace" in err
     assert "Traceback" not in err
+
+
+def test_new_refuses_to_clobber_an_existing_draft_without_force(tmp_path, capsys):
+    repo_path = str(tmp_path / "repo")
+    main(["init", repo_path])
+    capsys.readouterr()
+
+    struct_file = _write_json(tmp_path / "cake.json", CAKE_STRUCT)
+    draft = str(tmp_path / "draft.json")
+    args = [
+        "new", "--repo", repo_path, "--branch", "main", "--title", "v1", "--intent", "start",
+        "--structure-type", "examples.recipe.CakeRecipe", "--structure-file", struct_file, "--out", draft,
+    ]
+    assert main(args) == 0
+    capsys.readouterr()
+
+    # hand-edit the draft - this must survive a re-run without --force
+    payload = json.loads(Path(draft).read_text())
+    payload["intent"] = "precious hand edit"
+    Path(draft).write_text(json.dumps(payload))
+
+    assert main(args) == 1
+    err = capsys.readouterr().err
+    assert "existe déjà" in err
+    assert json.loads(Path(draft).read_text())["intent"] == "precious hand edit"  # untouched
+
+    assert main(args + ["--force"]) == 0
+    assert json.loads(Path(draft).read_text())["intent"] == "start"  # now overwritten, deliberately
+
+
+def test_committing_the_same_unmodified_draft_twice_is_a_no_op_not_a_duplicate(tmp_path, capsys):
+    repo_path = str(tmp_path / "repo")
+    main(["init", repo_path])
+    capsys.readouterr()
+
+    struct_file = _write_json(tmp_path / "cake.json", CAKE_STRUCT)
+    draft = str(tmp_path / "draft.json")
+    main(
+        [
+            "new", "--repo", repo_path, "--branch", "main", "--title", "v1", "--intent", "start",
+            "--structure-type", "examples.recipe.CakeRecipe", "--structure-file", struct_file, "--out", draft,
+        ]
+    )
+    capsys.readouterr()
+
+    assert main(["commit", draft, "--repo", repo_path]) == 0
+    first_id = capsys.readouterr().out.split()[0]
+
+    # re-running commit on the exact same, unmodified file (e.g. a retried script) must not
+    # create a second, orphaned commit
+    assert main(["commit", draft, "--repo", repo_path]) == 0
+    second_id = capsys.readouterr().out.split()[0]
+    assert second_id == first_id
+
+    from follow import Repository
+
+    repo = Repository(repo_path)
+    assert len(repo) == 1

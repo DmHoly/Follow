@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .quantity import Quantity
 
@@ -54,6 +54,16 @@ class ReferenceLink(BaseModel):
     experiment_id: str | None = None
     external_source: str | None = None
     note: str | None = None
+
+    @model_validator(mode="after")
+    def _check_has_a_target(self) -> "ReferenceLink":
+        if self.experiment_id is None and self.external_source is None:
+            raise ValueError(
+                "a reference needs a target: set experiment_id (another experiment in this "
+                "repository) or external_source (a URL/DOI/citation outside it) - otherwise it's "
+                "just a floating label pointing at nothing"
+            )
+        return self
 
 
 class Evidence(BaseModel):
@@ -128,3 +138,15 @@ class Experiment(BaseModel):
 
     tags: list[str] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _check_objective_results_reference_real_objectives(self) -> "Experiment":
+        known = {o.name for o in self.objectives}
+        for result in self.conclusion.objective_results:
+            if result.objective not in known:
+                raise ValueError(
+                    f"conclusion references objective {result.objective!r}, which is not one of "
+                    f"this experiment's objectives ({sorted(known)!r}) - check for a typo, or add "
+                    "the objective before concluding on it"
+                )
+        return self

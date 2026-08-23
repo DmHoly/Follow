@@ -24,7 +24,7 @@ def test_objective_is_frozen():
 
 
 def test_reference_link_is_frozen():
-    reference = ReferenceLink(role="baseline", label="parent")
+    reference = ReferenceLink(role="baseline", label="parent", experiment_id="exp_abc")
     with pytest.raises(ValidationError):
         reference.label = "mutated"
 

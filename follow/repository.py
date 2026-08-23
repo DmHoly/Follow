@@ -108,10 +108,15 @@ class ExperimentBuilder:
 
         A builder can only be committed once: committing, then continuing to edit the same
         builder and committing again does *not* amend the first commit (Follow has no amend -
-        commits are immutable) - it silently produces a sibling with the same parent, leaving
-        the first commit orphaned (still in the repository, but unreachable from the branch tip
-        via :meth:`Repository.log`). To avoid that footgun, a second call raises; derive a new
-        builder from the result instead.
+        commits are immutable) - it would otherwise silently produce a sibling with the same
+        parent, leaving the first commit orphaned (still in the repository, but unreachable from
+        the branch tip via :meth:`Repository.log`). To avoid that footgun, a second call on the
+        same builder raises; derive a new builder from the result instead.
+
+        Committing a *different* builder (e.g. loaded fresh from an unmodified draft file - a
+        CLI command or script re-run by mistake) whose content is otherwise identical to its
+        branch's current tip is a safe no-op: you get that same tip back rather than a
+        duplicate, since :meth:`Repository._commit` checks content, not object identity.
         """
         if self._committed:
             raise FollowError(
@@ -468,6 +473,19 @@ class Repository:
             tags=builder.tags,
             metadata=builder.metadata,
         )
+        current_tip_id = self._branches.get(builder.branch)
+        if current_tip_id is not None:
+            current_tip = self._objects[current_tip_id]
+            # Ignoring id/created_at, is this commit identical to the branch's current tip? If
+            # so this is very likely the same commit being made again by mistake (a CLI command
+            # re-run on an unmodified draft file, a retried script...) rather than a deliberate
+            # new commit - creating one anyway would silently orphan the existing tip (it would
+            # no longer be reachable via log() once the branch moves), so treat it as a no-op
+            # and hand back the experiment that's already there instead of duplicating it.
+            unchanged = provisional.model_dump(mode="json", exclude={"id", "created_at"})
+            if unchanged == current_tip.model_dump(mode="json", exclude={"id", "created_at"}):
+                return current_tip
+
         payload = provisional.model_dump(mode="json", exclude={"id"})
         experiment = provisional.model_copy(update={"id": content_id("experiment", payload)})
 
