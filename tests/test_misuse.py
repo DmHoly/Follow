@@ -163,3 +163,31 @@ def test_a_genuinely_different_commit_on_the_same_branch_is_not_treated_as_a_no_
 
     assert v2.id != v1.id
     assert len(repo) == 2
+
+
+def test_duplicate_step_order_is_rejected():
+    repo = Repository()
+    builder = repo.new(branch="main", structure=_cake(), title="v1", intent="x")
+    builder.add_step(name="A", order=1)
+    builder.add_step(name="B", order=1)
+
+    with pytest.raises(ValidationError, match="order=1"):
+        builder.commit()
+
+
+def test_depends_on_referencing_an_unknown_step_order_is_rejected():
+    repo = Repository()
+    builder = repo.new(branch="main", structure=_cake(), title="v1", intent="x")
+    builder.add_step(name="A", depends_on=[99])
+
+    with pytest.raises(ValidationError, match="depends_on"):
+        builder.commit()
+
+
+def test_depends_on_referencing_a_real_step_is_fine():
+    repo = Repository()
+    builder = repo.new(branch="main", structure=_cake(), title="v1", intent="x")
+    builder.add_step(name="A")
+    builder.add_step(name="B", depends_on=[1])
+    committed = builder.commit()
+    assert committed.steps[1].depends_on == [1]

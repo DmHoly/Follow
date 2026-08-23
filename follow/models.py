@@ -150,3 +150,26 @@ class Experiment(BaseModel):
                     "the objective before concluding on it"
                 )
         return self
+
+    @model_validator(mode="after")
+    def _check_steps_are_well_formed(self) -> "Experiment":
+        orders = [s.order for s in self.steps]
+        seen: set[int] = set()
+        for order in orders:
+            if order in seen:
+                raise ValueError(
+                    f"two steps both have order={order} - step order must be unique so the "
+                    "protocol has one unambiguous sequence (add_step() sets it automatically; "
+                    "pass order= explicitly only if you need to override that)"
+                )
+            seen.add(order)
+        known_orders = set(orders)
+        for step in self.steps:
+            unknown = [d for d in step.depends_on if d not in known_orders]
+            if unknown:
+                raise ValueError(
+                    f"step {step.order} ({step.name!r}) depends_on={unknown}, which "
+                    f"{'is not an' if len(unknown) == 1 else 'are not'} order of any step in this "
+                    "experiment - check for a typo"
+                )
+        return self

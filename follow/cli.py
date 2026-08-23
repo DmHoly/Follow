@@ -60,7 +60,22 @@ def _load_structure_class(dotted: str) -> type[Structure]:
 
 
 def _read_structure_payload(path: str) -> dict[str, Any]:
-    return json.loads(Path(path).read_text())
+    """Read and parse a JSON file (a ``--structure-file`` or a draft passed to ``commit``),
+    turning the common mistakes - a typo'd path, a directory, unreadable permissions, or
+    hand-edited JSON with a syntax error - into a clean one-line message instead of a traceback.
+    """
+    try:
+        text = Path(path).read_text()
+    except FileNotFoundError as exc:
+        raise SystemExit(f"fichier introuvable : {path}") from exc
+    except IsADirectoryError as exc:
+        raise SystemExit(f"{path} est un dossier, pas un fichier") from exc
+    except PermissionError as exc:
+        raise SystemExit(f"permission refusée pour lire {path}") from exc
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"{path} n'est pas un JSON valide : {exc}") from exc
 
 
 def _write_draft(out: Path, builder: Any, *, force: bool) -> int | None:
@@ -80,6 +95,8 @@ def _write_draft(out: Path, builder: Any, *, force: bool) -> int | None:
 
 def cmd_init(args: argparse.Namespace) -> int:
     path = Path(args.path)
+    if path.exists() and not path.is_dir():
+        return _fail(f"{path} existe déjà et n'est pas un dossier")
     if path.exists() and any(path.iterdir()):
         return _fail(f"{path} existe déjà et n'est pas vide")
     (path / "objects").mkdir(parents=True, exist_ok=True)

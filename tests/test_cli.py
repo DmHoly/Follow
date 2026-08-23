@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from follow.cli import main
 
 CAKE_STRUCT = {
@@ -353,3 +355,65 @@ def test_committing_the_same_unmodified_draft_twice_is_a_no_op_not_a_duplicate(t
 
     repo = Repository(repo_path)
     assert len(repo) == 1
+
+
+def test_malformed_structure_json_is_a_clean_message_not_a_traceback(tmp_path, capsys):
+    bad = tmp_path / "bad.json"
+    bad.write_text("{not valid json")
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(
+            [
+                "new", "--repo", str(tmp_path / "repo"), "--branch", "main", "--title", "v1", "--intent", "x",
+                "--structure-type", "examples.recipe.CakeRecipe", "--structure-file", str(bad),
+            ]
+        )
+    assert "JSON valide" in str(excinfo.value)
+
+
+def test_missing_structure_file_is_a_clean_message_not_a_traceback(tmp_path):
+    missing = tmp_path / "does_not_exist.json"
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(
+            [
+                "new", "--repo", str(tmp_path / "repo"), "--branch", "main", "--title", "v1", "--intent", "x",
+                "--structure-type", "examples.recipe.CakeRecipe", "--structure-file", str(missing),
+            ]
+        )
+    assert "introuvable" in str(excinfo.value)
+
+
+def test_structure_file_pointing_at_a_directory_is_a_clean_message(tmp_path):
+    a_directory = tmp_path / "oops_a_dir"
+    a_directory.mkdir()
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(
+            [
+                "new", "--repo", str(tmp_path / "repo"), "--branch", "main", "--title", "v1", "--intent", "x",
+                "--structure-type", "examples.recipe.CakeRecipe", "--structure-file", str(a_directory),
+            ]
+        )
+    assert "dossier" in str(excinfo.value)
+
+
+def test_malformed_draft_json_on_commit_is_a_clean_message(tmp_path):
+    repo_path = str(tmp_path / "repo")
+    main(["init", repo_path])
+    bad_draft = tmp_path / "bad_draft.json"
+    bad_draft.write_text("{not valid")
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(["commit", str(bad_draft), "--repo", repo_path])
+    assert "JSON valide" in str(excinfo.value)
+
+
+def test_init_on_a_path_that_is_a_file_fails_cleanly(tmp_path, capsys):
+    not_a_dir = tmp_path / "somefile.txt"
+    not_a_dir.write_text("x")
+
+    assert main(["init", str(not_a_dir)]) == 1
+    err = capsys.readouterr().err
+    assert "n'est pas un dossier" in err
+    assert "Traceback" not in err
