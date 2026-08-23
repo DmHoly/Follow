@@ -35,27 +35,35 @@ Affichage hybride
 --------------------
 
 :func:`follow.report.batch_table` rend un :class:`~follow.batch.BatchVariation` comme un bloc
-HTML autonome (même thème que :func:`~follow.report.fiche_card`) : la base commune en liste
-plate, puis les facteurs variables "explosés" en un tableau (une ligne par paramètre, une
-colonne par entité). Il est pensé pour être posé à côté de la fiche habituelle de
-l'expérience, pas pour la remplacer — la fiche donne la vue "une expérience", le tableau donne
-la vue "many variantes" :
+HTML (même thème que :func:`~follow.report.experiment_fiche`) : la base commune en liste plate,
+puis les facteurs variables "explosés" en un tableau (une ligne par paramètre, une colonne par
+entité). Deux façons de le poser :
+
+- ``standalone=True`` (défaut) : un ``.fiche-card`` autonome, à côté de la fiche habituelle de
+  l'expérience — la fiche donne la vue "une expérience", le tableau donne la vue "many variantes".
+- ``standalone=False`` : un simple fragment ``.fiche-row``, pensé pour être **intégré**
+  directement dans :func:`~follow.report.experiment_fiche` via son paramètre ``split=`` — le
+  split apparaît alors comme une section de plus dans la même fiche, entre les objectifs et les
+  résultats (voir :doc:`report`).
 
 .. code-block:: python
 
-   from follow import batch_table
+   from follow import analyze_batch, experiment_fiche
+   from follow.report import batch_table
 
-   section = fiche_card(...)               # la vue "une expérience", comme d'habitude
-   section += batch_table(
+   variation = analyze_batch(lot.wafers, ignore=["slot"])
+   split = batch_table(
        variation,
        entity_labels=[f"#{w.slot}" for w in lot.wafers],
-       title="LOT-A explosé — 25 wafers",
+       title="Split (25 wafers)",
+       standalone=False,               # <- un fragment, pas une carte à part
    )
+   fiche = experiment_fiche(experiment, split=split)
 
 Voir ``demos/wafer_doe.py`` pour un scénario complet : un plan factoriel 5×5 (dose
 d'implantation × température de recuit) sur 25 wafers, suivi d'un lot de confirmation de 5
 wafers à la combinaison retenue — le premier ressort avec deux facteurs variables, le second
-ressort ``is_uniform``.
+ressort ``is_uniform`` — chacun intégré dans la fiche de son expérience via ``split=``.
 
 Équivalent en CLI
 -----------------

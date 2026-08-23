@@ -124,6 +124,8 @@ def render_fiche(experiment: Experiment, repo: "Repository") -> str:
                 lines.append(f"  → **{result.status}**{observed}")
                 if result.reasoning:
                     lines.append(f"  {result.reasoning}")
+                if result.evidence_ids:
+                    lines.append(f"  preuve(s): {', '.join(f'`{eid}`' for eid in result.evidence_ids)}")
         lines.append("")
 
     if experiment.evidence:
@@ -143,6 +145,9 @@ def render_fiche(experiment: Experiment, repo: "Repository") -> str:
     if experiment.conclusion.summary:
         lines.append("")
         lines.append(experiment.conclusion.summary)
+    if experiment.conclusion.next_steps:
+        lines.append("")
+        lines.append(f"**Suite** : {experiment.conclusion.next_steps}")
     lines.append("")
 
     return "\n".join(lines)

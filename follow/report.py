@@ -3,26 +3,30 @@ f-strings over the data already sitting in a :class:`~follow.repository.Reposito
 
 Two layers:
 
-- A small set of HTML building blocks (:func:`trial_card`, :func:`resolution_conflict_row`,
-  :func:`resolution_plain_row`, :func:`fiche_card`, :func:`render_page`) that demo scripts can
-  compose by hand for a curated narrative (see ``demos/``).
+- A small set of HTML building blocks that demo scripts can compose by hand for a curated
+  narrative (see ``demos/``): :func:`experiment_fiche` (the complete, ergonomic per-experiment
+  card - summary, objectives, an optional split, results tied to their evidence, conclusion),
+  its lower-level parts (:func:`objectives_table`, :func:`results_table`, :func:`fiche_card`),
+  :func:`batch_table` (the DOE "exploded" view, see :mod:`follow.batch`), :func:`trial_card`,
+  :func:`resolution_conflict_row`/:func:`resolution_plain_row`, and :func:`render_page`.
 - :func:`render_study_html`, which builds a full "compte rendu d'étude" report straight from a
-  Repository with no hand-authoring at all: every experiment becomes a card, and for merge
-  commits the two parents are diffed against the result to show, path by path, which side each
-  value was taken from - the same logic ``repo.diff``/``repo.diff_steps`` already expose.
+  Repository with no hand-authoring at all: every experiment becomes an :func:`experiment_fiche`
+  card, and for merge commits the two parents are diffed against the result to show, path by
+  path, which side each value was taken from - the same logic ``repo.diff``/``repo.diff_steps``
+  already expose.
 """
 
 from __future__ import annotations
 
 import html as _html
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Sequence
 
 from .batch import BatchVariation
 from .diffing import StructureDiff
 from .formatting import format_value
 from .graphing import build_graph_figure
 from .merging import get_path, split_path
-from .models import Experiment
+from .models import Evidence, Experiment, Objective, ObjectiveResult
 
 if TYPE_CHECKING:
     from .repository import Repository
@@ -170,6 +174,24 @@ h1 { font: 800 clamp(30px, 4.2vw, 46px)/1.08 "Archivo", sans-serif; text-wrap: b
 .diff-line { font: 500 12.5px "IBM Plex Mono", monospace; color: var(--ink-soft); }
 .diff-line.added { color: var(--status-good); }
 .diff-line.removed { color: var(--status-bad); }
+
+.result-verdict { display: inline-flex; align-items: center; gap: 6px; font: 600 11px "IBM Plex Mono", monospace;
+  text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
+.result-verdict .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
+.result-verdict.met { color: var(--status-good); }
+.result-verdict.not_met { color: var(--status-bad); }
+.result-verdict.partially_met { color: var(--status-explore); }
+.result-verdict.inconclusive { color: var(--status-neutral); }
+
+.evidence-link { color: var(--accent-ink); text-decoration: none; border-bottom: 1px dashed var(--accent-ink);
+  font: 500 13px "Public Sans", sans-serif; }
+.evidence-link:hover { border-bottom-style: solid; }
+.evidence-metric { font: 500 12px "IBM Plex Mono", monospace; color: var(--ink-faint); }
+
+.next-steps { background: var(--surface-2); border-radius: 10px; padding: 14px 16px; border-left: 3px solid var(--accent); }
+.next-steps .label { display: block; font: 600 11px "Public Sans", sans-serif; text-transform: uppercase;
+  letter-spacing: .08em; color: var(--accent-ink); margin-bottom: 4px; }
+.next-steps .text { font: 400 14.5px/1.6 "Public Sans", sans-serif; color: var(--ink); }
 
 .repro { background: #1B2320; color: #D8E0D6; border-radius: 14px; padding: 22px 24px;
   font: 400 13px/1.85 "IBM Plex Mono", monospace; overflow-x: auto; box-shadow: var(--shadow); }
@@ -326,17 +348,19 @@ def batch_table(
     entity_labels: list[str] | None = None,
     title: str = "Entités du lot",
     uniform_note: str = "Aucune variation : les entités sont identiques sur tous les paramètres relevés.",
+    standalone: bool = True,
 ) -> str:
     """Render a :class:`~follow.batch.BatchVariation` (see :func:`follow.batch.analyze_batch`) as
     the "hybrid display" a DOE-style experiment needs: the shared baseline (params identical on
     every entity) as a flat list, and the varying DOE factors "exploded" into one row per
     parameter, one column per entity.
 
-    This is a self-contained ``.fiche-card``-style block, meant to sit next to (not replace) the
-    experiment's regular :func:`fiche_card` - the fiche card is the one-experiment view, this is
-    the many-entities view of that same experiment. Callers are responsible for escaping
-    ``entity_labels``; the constant/varying values themselves come straight from repository data
-    and are escaped here.
+    By default this is a self-contained ``.fiche-card``-style block, meant to sit next to the
+    experiment's regular :func:`fiche_card`/:func:`experiment_fiche`. Pass ``standalone=False``
+    to instead get a plain ``.fiche-row`` fragment (same table, no card chrome) for embedding
+    *inside* another card - see :func:`experiment_fiche`'s ``split=`` argument, which is exactly
+    this. Callers are responsible for escaping ``entity_labels``; the constant/varying values
+    themselves come straight from repository data and are escaped here.
     """
     labels = entity_labels or [f"Entité {i + 1}" for i in range(variation.entity_count)]
     if variation.is_uniform:
@@ -372,14 +396,209 @@ def batch_table(
             "      </div>"
         )
 
+    count_label = f"{variation.entity_count} entités · {len(variation.varying)} paramètre(s) variable(s)"
+    if not standalone:
+        return f'    <div class="fiche-row">\n      <div class="fiche-label">{_esc(title)} ({count_label})</div>\n{body}\n    </div>'
+
     return f"""    <div class="fiche-card">
       <div class="fiche-top">
         <div>
           <div class="fiche-title">{_esc(title)}</div>
-          <div class="fiche-id">{variation.entity_count} entités · {len(variation.varying)} paramètre(s) variable(s)</div>
+          <div class="fiche-id">{count_label}</div>
         </div>
       </div>
 {body}
+    </div>"""
+
+
+def objectives_table(objectives: Sequence[Objective]) -> str:
+    """A clean table of a study's objectives - what's being targeted, in which direction, and
+    why - straight from :class:`~follow.models.Objective`, instead of buried in prose. Returns
+    ``""`` (nothing rendered) when there are no objectives.
+    """
+    if not objectives:
+        return ""
+    rows = []
+    for o in objectives:
+        target_bits = []
+        if o.target is not None:
+            target_bits.append(f"cible {_esc(o.target)}")
+        if o.tolerance is not None:
+            target_bits.append(f"± {_esc(o.tolerance)}")
+        if o.range is not None:
+            target_bits.append(f"plage {_esc(o.range[0])}–{_esc(o.range[1])}")
+        target = ", ".join(target_bits) or "—"
+        rows.append(
+            f"<tr><td>{_esc(o.name)}</td><td>{_esc(o.direction)}</td><td>{target}</td>"
+            f"<td>{_esc(o.rationale) if o.rationale else '—'}</td></tr>"
+        )
+    return (
+        '    <div class="fiche-row">\n'
+        '      <div class="fiche-label">Objectifs de l\'étude</div>\n'
+        '      <div class="table-scroll">\n'
+        '        <table class="source-table">\n'
+        "          <thead><tr><th>Objectif</th><th>Direction</th><th>Cible</th><th>Justification</th></tr></thead>\n"
+        f"          <tbody>\n            {chr(10).join(rows)}\n          </tbody>\n"
+        "        </table>\n"
+        "      </div>\n"
+        "    </div>"
+    )
+
+
+def results_table(objective_results: Sequence[ObjectiveResult], evidence: Sequence[Evidence]) -> str:
+    """The "résultats & preuves" overview: one row per objective verdict (met/not_met/...), the
+    value observed, the reasoning, and - the point of this table - which :class:`Evidence
+    <follow.models.Evidence>` backs it (:attr:`ObjectiveResult.evidence_ids
+    <follow.models.ObjectiveResult.evidence_ids>`), linked to its source. Follow never analyzes
+    anything itself - that's delegated to whatever produced the evidence (a notebook, a stats
+    report, a plot) - this table just makes explicit which piece of proof a given verdict rests
+    on, rather than leaving "why did we decide this" to a free-text summary.
+
+    Evidence not cited by any objective result still shows up, in a separate "Autres preuves"
+    block, rather than silently vanishing - a result citing nothing and evidence citing no result
+    are both worth surfacing, not hiding.
+    """
+    if not objective_results and not evidence:
+        return ""
+
+    evidence_by_id = {e.id: e for e in evidence}
+    cited_ids: set[str] = set()
+    rows = []
+    for r in objective_results:
+        cited_ids.update(r.evidence_ids)
+        proof_links = []
+        for eid in r.evidence_ids:
+            e = evidence_by_id.get(eid)
+            if e is None:
+                proof_links.append(_esc(eid))
+            else:
+                proof_links.append(f'<a class="evidence-link" href="{_esc(e.source)}">{_esc(e.description)}</a>')
+        proof = ", ".join(proof_links) if proof_links else "—"
+        observed = _esc(format_value(r.observed.model_dump(mode="json"))) if r.observed else "—"
+        rows.append(
+            f"<tr><td>{_esc(r.objective)}</td>"
+            f'<td><span class="result-verdict {_esc(r.status)}"><span class="dot"></span>{_esc(r.status)}</span></td>'
+            f"<td>{observed}</td>"
+            f"<td>{_esc(r.reasoning) if r.reasoning else '—'}</td>"
+            f"<td>{proof}</td></tr>"
+        )
+
+    table_html = ""
+    if rows:
+        table_html = (
+            '    <div class="fiche-row">\n'
+            '      <div class="fiche-label">Résultats &amp; preuves</div>\n'
+            '      <div class="table-scroll">\n'
+            '        <table class="source-table">\n'
+            "          <thead><tr><th>Objectif</th><th>Verdict</th><th>Observé</th><th>Raisonnement</th><th>Preuve</th></tr></thead>\n"
+            f"          <tbody>\n            {chr(10).join(rows)}\n          </tbody>\n"
+            "        </table>\n"
+            "      </div>\n"
+            "    </div>"
+        )
+
+    unlinked = [e for e in evidence if e.id not in cited_ids]
+    unlinked_html = ""
+    if unlinked:
+        items = "".join(
+            f'<div><a class="evidence-link" href="{_esc(e.source)}">{_esc(e.description)}</a>'
+            + "".join(
+                f' <span class="evidence-metric">· {_esc(k)}: {_esc(format_value(v.model_dump(mode="json")))}</span>'
+                for k, v in e.metrics.items()
+            )
+            + "</div>"
+            for e in unlinked
+        )
+        unlinked_html = f'    <div class="fiche-row">\n      <div class="fiche-label">Autres preuves</div>\n      <div class="fiche-text">{items}</div>\n    </div>'
+
+    return "\n".join(part for part in (table_html, unlinked_html) if part)
+
+
+def experiment_fiche(
+    experiment: Experiment,
+    *,
+    badges_extra: Sequence[str] = (),
+    parents: Sequence[tuple[str, str, str]] = (),
+    parents_label: str = "Filiation",
+    split: str = "",
+) -> str:
+    """The complete, ergonomic fiche for one experiment, straight from its own fields, in one
+    reading order: **résumé** (intention + hypothèse) → **objectifs** de l'étude → the split
+    itself, if any (pass ``split=batch_table(variation, standalone=False)``, see
+    :func:`batch_table`) → **résultats & preuves** (:func:`results_table` - verdicts tied to the
+    evidence backing each one) → **conclusion** (decision badge, narrative, and what's next).
+
+    Unlike :func:`fiche_card` (a low-level building block where the caller pre-escapes every
+    argument), this takes a real :class:`~follow.models.Experiment` and escapes its own text -
+    the one-call entry point for rendering an experiment as-is. ``parents`` and ``badges_extra``
+    work exactly like :func:`fiche_card`'s.
+    """
+    badges = [experiment.conclusion.status]
+    if experiment.conclusion.decision:
+        badges.append(_DECISION_LABELS.get(experiment.conclusion.decision, experiment.conclusion.decision))
+    badges = [_esc(b) for b in [*badges, *badges_extra]]
+
+    badges_html = "\n          ".join(f'<span class="badge">{b}</span>' for b in badges)
+
+    parents_row = ""
+    if parents:
+        pills_html = "\n          ".join(
+            f'<div class="parent-pill"><span class="role">{_esc(role)} · {_esc(branch_name)}</span>'
+            f'<span class="lbl">{_esc(label)}</span></div>'
+            for role, branch_name, label in parents
+        )
+        parents_row = (
+            '\n\n      <div class="fiche-row">\n'
+            f'        <div class="fiche-label">{_esc(parents_label)}</div>\n'
+            f'        <div class="parent-pills">\n          {pills_html}\n        </div>\n'
+            "      </div>"
+        )
+
+    hypothesis_row = ""
+    if experiment.hypothesis:
+        hypothesis_row = (
+            '\n\n      <div class="fiche-row">\n        <div class="fiche-label">Hypothèse</div>\n'
+            f'        <p class="fiche-text">{_esc(experiment.hypothesis)}</p>\n      </div>'
+        )
+
+    body_parts = [
+        objectives_table(experiment.objectives),
+        split,
+        results_table(experiment.conclusion.objective_results, experiment.evidence),
+    ]
+    body = "\n".join(part for part in body_parts if part)
+
+    conclusion_text = _esc(experiment.conclusion.summary) if experiment.conclusion.summary else "—"
+    next_steps_html = ""
+    if experiment.conclusion.next_steps:
+        next_steps_html = (
+            '\n\n      <div class="fiche-row">\n        <div class="fiche-label">Suite</div>\n'
+            '        <div class="next-steps"><span class="label">Prochaine étape</span>'
+            f'<span class="text">{_esc(experiment.conclusion.next_steps)}</span></div>\n      </div>'
+        )
+
+    return f"""    <div class="fiche-card">
+      <div class="fiche-top">
+        <div>
+          <div class="fiche-title">{_esc(experiment.title)}</div>
+          <div class="fiche-id">{_esc(experiment.id)} · branche {_esc(experiment.branch)}</div>
+        </div>
+        <div class="fiche-badges">
+          {badges_html}
+        </div>
+      </div>
+
+      <div class="fiche-row">
+        <div class="fiche-label">Intention</div>
+        <p class="fiche-text">{_esc(experiment.intent)}</p>
+      </div>{hypothesis_row}{parents_row}
+
+{body}
+
+      <div class="fiche-row">
+        <div class="fiche-label">Conclusion</div>
+        <p class="fiche-text">{conclusion_text}</p>
+      </div>{next_steps_html}
     </div>"""
 
 
@@ -540,65 +759,17 @@ def _merge_attribution_html(repo: "Repository", exp: Experiment) -> str:
     )
 
 
-def _objectives_html(exp: Experiment) -> str:
-    if not exp.objectives:
-        return ""
-    results_by_name = {r.objective: r for r in exp.conclusion.objective_results}
-    lines = []
-    for objective in exp.objectives:
-        result = results_by_name.get(objective.name)
-        status = f" → <strong>{_esc(result.status)}</strong>" if result else ""
-        observed = f" (observé : {_esc(format_value(result.observed.model_dump(mode='json')))})" if result and result.observed else ""
-        lines.append(f"<div>{_esc(objective.name)} ({_esc(objective.direction)}){status}{observed}</div>")
-    return (
-        '    <div class="fiche-row">\n      <div class="fiche-label">Objectifs</div>\n      <div class="fiche-text">'
-        + "".join(lines)
-        + "</div>\n    </div>"
-    )
-
-
-def _evidence_html(exp: Experiment) -> str:
-    if not exp.evidence:
-        return ""
-    lines = [
-        f"<div>{_esc(e.description)} — {_esc(e.source)}"
-        + "".join(f" · {_esc(k)}: {_esc(format_value(v.model_dump(mode='json')))}" for k, v in e.metrics.items())
-        + "</div>"
-        for e in exp.evidence
-    ]
-    return (
-        '    <div class="fiche-row">\n      <div class="fiche-label">Preuves</div>\n      <div class="fiche-text">'
-        + "".join(lines)
-        + "</div>\n    </div>"
-    )
-
-
 def _experiment_section(repo: "Repository", exp: Experiment, index: int, total: int) -> str:
-    badges = [exp.conclusion.status]
-    if exp.conclusion.decision:
-        badges.append(_DECISION_LABELS.get(exp.conclusion.decision, exp.conclusion.decision))
-    badges = [_esc(b) for b in badges]
-
     parents = [
         ("parent", repo.get(p).branch if p in repo else "?", f"{p[:12]} — {repo.get(p).title if p in repo else 'introuvable'}")
         for p in exp.parents
     ]
-    parents = [(_esc(role), _esc(branch), _esc(label)) for role, branch, label in parents]
     parents_label = "Filiation (fusion)" if len(exp.parents) == 2 else "Filiation"
 
-    card = fiche_card(
-        fiche_title=_esc(exp.title),
-        exp_id=_esc(exp.id),
-        branch=_esc(exp.branch),
-        badges=badges,
-        intent=_esc(exp.intent),
-        parents=parents,
-        parents_label=parents_label,
-        conclusion=_esc(exp.conclusion.summary) if exp.conclusion.summary else "—",
-    )
-    extra = "\n".join(part for part in (_lineage_html(repo, exp), _objectives_html(exp), _evidence_html(exp)) if part)
-    if extra:
-        card = card[: -len("\n    </div>")] + "\n" + extra + "\n    </div>"
+    card = experiment_fiche(exp, parents=parents, parents_label=parents_label)
+    lineage = _lineage_html(repo, exp)
+    if lineage:
+        card = card[: -len("\n    </div>")] + "\n" + lineage + "\n    </div>"
 
     return f"""  <section class="section" id="{_esc(exp.id)}">
     <div class="section-head">

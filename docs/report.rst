@@ -27,9 +27,11 @@ En CLI :
 Ce que contient la page
 -------------------------
 
-Un sommaire cliquable, le graphe de filiation, puis une fiche par expérience (intention,
-objectifs, preuves, conclusion). Ce qui a changé à chaque commit est **calculé**, pas recopié à
-la main :
+Un sommaire cliquable, le graphe de filiation, puis une fiche par expérience — chacune rendue
+par :func:`~follow.report.experiment_fiche`, dans un seul ordre de lecture : **résumé**
+(intention + hypothèse) → **objectifs de l'étude** → **résultats & preuves** (chaque verdict relié
+à l'``Evidence`` exacte qui le justifie) → **conclusion** (décision, résumé, et la suite). Ce qui
+a changé à chaque commit est **calculé**, pas recopié à la main :
 
 - **un seul parent** → diff structure + protocole contre ce parent
   (:meth:`Repository.diff() <follow.repository.Repository.diff>` /
@@ -42,13 +44,44 @@ Le texte issu du dépôt (titres, intentions, résumés...) est échappé avant 
 (:func:`follow.report._esc`) : contrairement aux démos, où le texte est entièrement écrit par
 l'auteur du script, ce renderer affiche des données saisies par n'importe qui.
 
+Résultats reliés à leurs preuves
+------------------------------------
+
+Follow n'analyse jamais rien lui-même : l'analyse (statistique, notebook, graphique) est
+déléguée à autre chose. Ce que :func:`~follow.report.results_table` fait, c'est rendre explicite
+**quelle preuve** justifie **quel verdict**, via
+:attr:`ObjectiveResult.evidence_ids <follow.models.ObjectiveResult.evidence_ids>` :
+
+.. code-block:: python
+
+   builder.add_evidence(id="ev-raw", description="Mesures brutes", source="file:///data.csv")
+   builder.add_evidence(id="ev-analysis", description="Notebook d'analyse (ANOVA)", source="notebook:///analysis.ipynb")
+   builder.conclude(
+       objective_results=[dict(
+           objective="Résistance de couche", status="met", observed=Quantity(value=76, unit="ohm/sq"),
+           evidence_ids=["ev-raw", "ev-analysis"],   # <- la preuve qui atteste ce verdict
+       )],
+       next_steps="Lancer un lot de confirmation avant promotion.",
+   )
+
+La preuve citée devient un lien cliquable dans la fiche (``ev-analysis`` peut très bien pointer
+vers une feuille Jupyter qui a fait l'analyse statistique). Une ``Evidence`` jamais citée par
+aucun résultat n'est pas perdue pour autant : elle apparaît dans un bloc « Autres preuves »
+séparé plutôt que de disparaître silencieusement. ``Conclusion.next_steps`` (texte libre) capture
+la décision d'après, distincte de ``decision`` (la catégorie promote/branch/replicate/abandon).
+
 Briques réutilisables
 ------------------------
 
-:func:`~follow.report.render_page` assemble une page à partir de sections HTML pré-rendues ;
-:func:`~follow.report.fiche_card`, :func:`~follow.report.trial_card`,
-:func:`~follow.report.resolution_conflict_row` et :func:`~follow.report.resolution_plain_row`
-sont les briques que :func:`~follow.report.render_study_html` utilise en interne, réutilisables
-pour composer un rapport sur mesure. Voir ``demos/`` pour des exemples qui les assemblent à la
-main plutôt que de laisser ``follow report`` tout dériver automatiquement, et
-``demos/auto_report.py`` pour une comparaison directe des deux approches sur le même dépôt.
+:func:`~follow.report.render_page` assemble une page à partir de sections HTML pré-rendues.
+:func:`~follow.report.experiment_fiche` est la brique de haut niveau (elle échappe elle-même le
+texte de l'``Experiment`` qu'on lui passe) ; ses composants plus bas niveau —
+:func:`~follow.report.objectives_table`, :func:`~follow.report.results_table`,
+:func:`~follow.report.fiche_card` (où l'appelant échappe lui-même chaque argument),
+:func:`~follow.report.trial_card`, :func:`~follow.report.resolution_conflict_row` et
+:func:`~follow.report.resolution_plain_row` — sont individuellement réutilisables pour composer
+un rapport sur mesure. Voir :doc:`batch` pour intégrer un split DOE directement dans la fiche via
+``experiment_fiche(..., split=batch_table(variation, standalone=False))``, ``demos/`` pour des
+exemples qui assemblent ces briques à la main plutôt que de laisser ``follow report`` tout dériver
+automatiquement, et ``demos/auto_report.py`` pour une comparaison directe des deux approches sur
+le même dépôt.

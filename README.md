@@ -362,9 +362,10 @@ follow report --repo mon_labo --title "Étude gâteau au yaourt" --out etude.htm
 follow report essai-cuisson --repo mon_labo --out etude-branche.html  # limiter à une branche
 ```
 
-La page contient : un sommaire cliquable, le graphe de filiation, puis une fiche par expérience
-(intention, objectifs, preuves, conclusion). Pour chaque commit, ce qui a changé est calculé —
-pas recopié à la main :
+La page contient : un sommaire cliquable, le graphe de filiation, puis une fiche par expérience —
+`follow.report.experiment_fiche`, lue dans un seul ordre : **résumé** (intention + hypothèse) →
+**objectifs de l'étude** → **résultats & preuves** → **conclusion** (décision, résumé, et la
+suite). Pour chaque commit, ce qui a changé est calculé — pas recopié à la main :
 
 - **un seul parent** → diff structure + protocole contre ce parent (`repo.diff`/`diff_steps`) ;
 - **deux parents** (fusion) → chaque chemin qui diffère entre les deux parents est comparé à la
@@ -372,11 +373,18 @@ pas recopié à la main :
   (« valeur conservée du premier parent » / « valeur reprise du second parent »), au niveau de
   chaque feuille — plus précis qu'une note écrite à la main.
 
+Follow n'analyse jamais rien lui-même : le tableau résultats/preuves relie chaque verdict
+d'objectif à l'`Evidence` exacte qui le justifie (`evidence_ids`), avec un lien cliquable vers sa
+source — un fichier de mesures brutes, ou un notebook Jupyter qui a fait l'analyse statistique
+ailleurs. `Conclusion.next_steps` (texte libre) capture la suite, distincte de `decision`
+(promote/branch/replicate/abandon/inconclusive, catégoriel).
+
 Le texte issu du dépôt (titres, intentions, résumés...) est échappé avant insertion dans le
 HTML. `render_study_html(repo, ...)` est l'équivalent Python direct ; les briques visuelles
-(`fiche_card`, `trial_card`, `resolution_conflict_row`...) sont réutilisables pour composer un
-rapport sur mesure — voir `demos/` pour des exemples qui les assemblent à la main plutôt que de
-laisser `follow report` tout dériver automatiquement.
+(`experiment_fiche`, `objectives_table`, `results_table`, `fiche_card`, `trial_card`,
+`resolution_conflict_row`...) sont réutilisables pour composer un rapport sur mesure — voir
+`demos/` pour des exemples qui les assemblent à la main plutôt que de laisser `follow report` tout
+dériver automatiquement.
 
 ## Graphe de filiation
 

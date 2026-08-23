@@ -103,6 +103,7 @@ class Conclusion(BaseModel):
     objective_results: list[ObjectiveResult] = Field(default_factory=list)
     summary: str | None = None
     decision: Literal["promote", "branch", "replicate", "abandon", "inconclusive"] | None = None
+    next_steps: str | None = None
     decided_at: datetime | None = None
 
 

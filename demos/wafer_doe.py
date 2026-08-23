@@ -12,6 +12,12 @@ the two factors' value grids (follow.design.lin, a thin numpy.linspace wrapper) 
 reference Wafer, so the split is defined once as "these two factors, these ranges" rather than
 copy-pasted 25 times.
 
+Each lot's fiche (follow.report.experiment_fiche) reads, top to bottom: summary (intent +
+objectives), the split itself (batch_table, embedded via split=), results tied to the exact
+evidence that backs each one (follow.report.results_table - here a raw-measurements file *and*
+a Jupyter notebook doing the actual statistical analysis, since Follow never analyzes anything
+itself), and the conclusion - decision plus what happens next.
+
 A second commit runs a 5-wafer confirmation lot, all at the winning combination: analyze_batch
 reports it as uniform (no variation), the other half of the hybrid display.
 
@@ -23,7 +29,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from demos._report import batch_table, fiche_card, render_report
+from demos._report import batch_table, experiment_fiche, render_report
 from examples.wafer_doe import Wafer, WaferLot
 from follow import Quantity, Repository, analyze_batch
 from follow.design import full_factorial, lin
@@ -69,19 +75,35 @@ def build_repository() -> Repository:
     ab.add_step(order=1, name="Implantation", description="Implantation ionique, dose variable selon le plan factoriel")
     ab.add_step(order=2, name="Recuit d'activation", description="Four de recuit, temperature variable selon le plan factoriel", depends_on=[1])
     ab.add_step(order=3, name="Mesure 4 pointes", description="Resistance de couche (sheet resistance) au centre de chaque wafer", depends_on=[2])
-    ab.add_objective(name="Resistance de couche", metric="rs_ohm_sq", direction="minimize", target=80.0)
+    ab.add_objective(
+        name="Resistance de couche", metric="rs_ohm_sq", direction="minimize", target=80.0,
+        rationale="Cible process standard pour cette etape d'implantation - en dessous, le contact ohmique est fiable.",
+    )
+    # Follow ne fait pas l'analyse elle-meme : la mesure brute et l'analyse statistique (menee
+    # ailleurs, ici un notebook) sont deux preuves distinctes, citees explicitement par le
+    # resultat d'objectif ci-dessous plutot que resumees a la main.
     ab.add_evidence(
-        id="ev-lot-a", description="Mesures 4 pointes, 25 wafers", source="file:///fab/lot-a/measurements.csv",
+        id="ev-lot-a-raw", description="Mesures 4 pointes brutes, 25 wafers", source="file:///fab/lot-a/measurements.csv",
         metrics={"rs_ohm_sq_min": Quantity(value=76, unit="ohm/sq"), "rs_ohm_sq_median": Quantity(value=94, unit="ohm/sq")},
+    )
+    ab.add_evidence(
+        id="ev-lot-a-analysis", description="Notebook d'analyse (ANOVA, surface de reponse dose x temperature)",
+        source="notebook:///analysis/lot_a_doe_analysis.ipynb",
     )
     ab.conclude(
         status="concluded", decision="branch",
         summary=(
             "Le minimum de resistance de couche (76 ohm/sq) est obtenu au wafer #13 "
             "(dose=6e14 cm^-2, recuit=1000C) - au centre du plan, coherent avec un optimum "
-            "d'activation electrique. Un lot de confirmation est necessaire avant promotion."
+            "d'activation electrique. L'ANOVA (notebook joint) confirme les deux facteurs "
+            "significatifs, sans interaction dose x temperature."
         ),
-        objective_results=[dict(objective="Resistance de couche", status="met", observed=Quantity(value=76, unit="ohm/sq"), reasoning="Wafer #13, en dessous de la cible de 80 ohm/sq.")],
+        next_steps="Lancer un lot de confirmation homogene a dose=6e14 cm^-2 / 1000C pour valider la reproductibilite avant promotion en production.",
+        objective_results=[dict(
+            objective="Resistance de couche", status="met", observed=Quantity(value=76, unit="ohm/sq"),
+            reasoning="Wafer #13, en dessous de la cible de 80 ohm/sq ; confirme par l'ANOVA du notebook joint.",
+            evidence_ids=["ev-lot-a-raw", "ev-lot-a-analysis"],
+        )],
     )
     lot_a = ab.commit()
 
@@ -93,13 +115,22 @@ def build_repository() -> Repository:
     bb.steps[0] = bb.steps[0].model_copy(update={"description": "Implantation ionique, dose fixe 6e14 cm^-2"})
     bb.steps[1] = bb.steps[1].model_copy(update={"description": "Four de recuit, 1000C fixe"})
     bb.add_evidence(
-        id="ev-lot-b", description="Mesures 4 pointes, 5 wafers", source="file:///fab/lot-b/measurements.csv",
+        id="ev-lot-b-raw", description="Mesures 4 pointes brutes, 5 wafers", source="file:///fab/lot-b/measurements.csv",
         metrics={"rs_ohm_sq_min": Quantity(value=75, unit="ohm/sq"), "rs_ohm_sq_max": Quantity(value=79, unit="ohm/sq")},
+    )
+    bb.add_evidence(
+        id="ev-lot-b-analysis", description="Notebook d'analyse (repetabilite, ecart-type inter-wafer)",
+        source="notebook:///analysis/lot_b_confirmation_analysis.ipynb",
     )
     bb.conclude(
         status="concluded", decision="promote",
-        summary="Reproductible : les 5 wafers du lot de confirmation restent tous dans 75-79 ohm/sq. Combinaison retenue pour la production.",
-        objective_results=[dict(objective="Resistance de couche", status="met", observed=Quantity(value=77, unit="ohm/sq"), reasoning="Moyenne du lot de confirmation, sous la cible de 80 ohm/sq.")],
+        summary="Reproductible : les 5 wafers du lot de confirmation restent tous dans 75-79 ohm/sq, ecart-type inter-wafer negligeable (notebook joint). Combinaison retenue pour la production.",
+        next_steps="Transferer la combinaison (6e14 cm^-2 / 1000C) en production ; documenter la fenetre de process dans la fiche produit.",
+        objective_results=[dict(
+            objective="Resistance de couche", status="met", observed=Quantity(value=77, unit="ohm/sq"),
+            reasoning="Moyenne du lot de confirmation, sous la cible de 80 ohm/sq.",
+            evidence_ids=["ev-lot-b-raw", "ev-lot-b-analysis"],
+        )],
     )
     lot_b = bb.commit()
     repo.tag("combinaison-retenue", lot_b.id)
@@ -137,43 +168,43 @@ def render(repo: Repository, *, embed_plotly: bool) -> str:
 
     lot_a_structure = repo.load_structure(lot_a)
     lot_a_variation = analyze_batch(lot_a_structure.wafers, ignore=["slot"])
+    lot_a_split = batch_table(
+        lot_a_variation, entity_labels=[f"#{w.slot}" for w in lot_a_structure.wafers],
+        title="Split (25 wafers)", standalone=False,
+    )
     lot_a_section = f"""  <section class="section">
     <div class="section-head">
-      <div class="section-label">LOT-A - vue expérience</div>
+      <div class="section-label">LOT-A</div>
       <h2 class="section-title">{lot_a.title}</h2>
       <p class="section-desc">
-        La fiche ci-dessous est la vue "une expérience" habituelle. En dessous, la même
-        expérience "explosée" par <code>analyze_batch(lot.wafers)</code> : ce qui est
-        constant sur les 25 wafers, et ce qui varie réellement (les deux facteurs du plan).
+        Une seule fiche, lue de haut en bas : résumé et objectifs, le split lui-même (25
+        wafers, généré par <code>full_factorial</code>), les résultats reliés à leurs preuves
+        (mesure brute + notebook d'analyse), puis la conclusion et la suite.
       </p>
     </div>
-{fiche_card(
-    fiche_title=lot_a.title, exp_id=lot_a.id, branch=lot_a.branch,
-    badges=[lot_a.conclusion.status, lot_a.conclusion.decision],
-    intent=lot_a.intent, parents=[], conclusion=lot_a.conclusion.summary,
-)}
-{batch_table(lot_a_variation, entity_labels=[f"#{w.slot}" for w in lot_a_structure.wafers], title="LOT-A explosé - 25 wafers")}
+{experiment_fiche(lot_a, split=lot_a_split)}
   </section>"""
 
     lot_b_structure = repo.load_structure(lot_b)
     lot_b_variation = analyze_batch(lot_b_structure.wafers, ignore=["slot"])
+    lot_b_split = batch_table(
+        lot_b_variation, entity_labels=[f"#{w.slot}" for w in lot_b_structure.wafers],
+        title="Split (5 wafers)", standalone=False,
+    )
     lot_b_section = f"""  <section class="section">
     <div class="section-head">
-      <div class="section-label">LOT-B - vue expérience</div>
+      <div class="section-label">LOT-B</div>
       <h2 class="section-title">{lot_b.title}</h2>
       <p class="section-desc">
-        Le lot de confirmation n'a plus qu'une seule combinaison : <code>analyze_batch</code>
-        le signale comme uniforme (<code>is_uniform</code>), l'autre moitié de l'affichage
-        hybride - rien à explorer, juste confirmer.
+        Le lot de confirmation n'a plus qu'une seule combinaison : le split intégré à la fiche
+        ressort <code>is_uniform</code> - rien à explorer, juste confirmer.
       </p>
     </div>
-{fiche_card(
-    fiche_title=lot_b.title, exp_id=lot_b.id, branch=lot_b.branch,
-    badges=[lot_b.conclusion.status, lot_b.conclusion.decision, "tag: combinaison-retenue"],
-    intent=lot_b.intent, parents=[("parent", lot_b.branch, f"{lot_a.id[:12]} — {lot_a.title}")],
-    conclusion=lot_b.conclusion.summary,
+{experiment_fiche(
+    lot_b, badges_extra=["tag: combinaison-retenue"],
+    parents=[("parent", lot_b.branch, f"{lot_a.id[:12]} — {lot_a.title}")],
+    split=lot_b_split,
 )}
-{batch_table(lot_b_variation, entity_labels=[f"#{w.slot}" for w in lot_b_structure.wafers], title="LOT-B explosé - 5 wafers")}
   </section>"""
 
     footer = f"""<footer class="footer section">

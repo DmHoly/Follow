@@ -141,6 +141,24 @@ h1 { font: 800 clamp(30px, 4.2vw, 46px)/1.08 "Archivo", sans-serif; text-wrap: b
 .diff-line.added { color: var(--status-good); }
 .diff-line.removed { color: var(--status-bad); }
 
+.result-verdict { display: inline-flex; align-items: center; gap: 6px; font: 600 11px "IBM Plex Mono", monospace;
+  text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
+.result-verdict .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
+.result-verdict.met { color: var(--status-good); }
+.result-verdict.not_met { color: var(--status-bad); }
+.result-verdict.partially_met { color: var(--status-explore); }
+.result-verdict.inconclusive { color: var(--status-neutral); }
+
+.evidence-link { color: var(--accent-ink); text-decoration: none; border-bottom: 1px dashed var(--accent-ink);
+  font: 500 13px "Public Sans", sans-serif; }
+.evidence-link:hover { border-bottom-style: solid; }
+.evidence-metric { font: 500 12px "IBM Plex Mono", monospace; color: var(--ink-faint); }
+
+.next-steps { background: var(--surface-2); border-radius: 10px; padding: 14px 16px; border-left: 3px solid var(--accent); }
+.next-steps .label { display: block; font: 600 11px "Public Sans", sans-serif; text-transform: uppercase;
+  letter-spacing: .08em; color: var(--accent-ink); margin-bottom: 4px; }
+.next-steps .text { font: 400 14.5px/1.6 "Public Sans", sans-serif; color: var(--ink); }
+
 .repro { background: #1B2320; color: #D8E0D6; border-radius: 14px; padding: 22px 24px;
   font: 400 13px/1.85 "IBM Plex Mono", monospace; overflow-x: auto; box-shadow: var(--shadow); }
 .repro .cmt { color: #7C8A79; }
@@ -180,50 +198,51 @@ h1 { font: 800 clamp(30px, 4.2vw, 46px)/1.08 "Archivo", sans-serif; text-wrap: b
     <div class="graph-frame">
       <div class="graph-inner">
         <div style="height:100%; width:100%;">                        <script>window.PlotlyConfig = {MathJaxConfig: 'local'};</script>
-        <script charset="utf-8" src="https://cdn.plot.ly/plotly-3.7.0.min.js" integrity="sha256-jvTGqxNp8AGWEcvNLVuKr+8j5dGe9Yw51LQkmDH+IYA=" crossorigin="anonymous"></script>                <div id="follow-graph" class="plotly-graph-div" style="height:100%; width:100%;"></div>            <script>                window.PLOTLYENV=window.PLOTLYENV || {};                                if (document.getElementById("follow-graph")) {                    Plotly.newPlot(                        "follow-graph",                        [{"hoverinfo":"none","line":{"color":"#b0b0b0","width":1.5},"mode":"lines","showlegend":false,"x":[0.0,0.0,null],"y":[0.0,1.0,null],"type":"scatter"},{"hoverinfo":"text","hovertext":["LOT-A - split factoriel 5x5 (dose x temperature de recuit)\u003cbr\u003eid: exp_37b8103cb202977f\u003cbr\u003ebranche: main\u003cbr\u003estatut: concluded\u003cbr\u003eintention: Quelle combinaison dose d'implantation \u002f temperature de recuit minimise la resistance de couche ?","LOT-B - confirmation a dose=6e14\u002f1000C sur 5 wafers\u003cbr\u003eid: exp_fdaa904ec6d5c17c\u003cbr\u003ebranche: main\u003cbr\u003estatut: concluded\u003cbr\u003eintention: La combinaison gagnante du plan factoriel est-elle reproductible sur un lot homogene ?"],"marker":{"color":["#2ca02c","#2ca02c"],"line":{"color":"#333333","width":1},"size":20},"mode":"markers+text","showlegend":false,"text":["LOT-A - split factoriel 5x5 (dose x temperature de recuit)","LOT-B - confirmation a dose=6e14\u002f1000C sur 5 wafers"],"textposition":"top center","x":[0.0,0.0],"y":[0.0,1.0],"type":"scatter"},{"hoverinfo":"none","mode":"text","showlegend":false,"text":["\u2325 main"],"textfont":{"color":"#8a6d00","size":11},"x":[0.0],"y":[0.7],"type":"scatter"}],                        {"template":{"data":{"histogram2dcontour":[{"type":"histogram2dcontour","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"choropleth":[{"type":"choropleth","colorbar":{"outlinewidth":0,"ticks":""}}],"histogram2d":[{"type":"histogram2d","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"heatmap":[{"type":"heatmap","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"contourcarpet":[{"type":"contourcarpet","colorbar":{"outlinewidth":0,"ticks":""}}],"contour":[{"type":"contour","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"surface":[{"type":"surface","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"mesh3d":[{"type":"mesh3d","colorbar":{"outlinewidth":0,"ticks":""}}],"scatter":[{"fillpattern":{"fillmode":"overlay","size":10,"solidity":0.2},"type":"scatter"}],"parcoords":[{"type":"parcoords","line":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatterpolargl":[{"type":"scatterpolargl","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"bar":[{"error_x":{"color":"#2a3f5f"},"error_y":{"color":"#2a3f5f"},"marker":{"line":{"color":"#E5ECF6","width":0.5},"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"bar"}],"scattergeo":[{"type":"scattergeo","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatterpolar":[{"type":"scatterpolar","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"histogram":[{"marker":{"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"histogram"}],"scattergl":[{"type":"scattergl","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatter3d":[{"type":"scatter3d","line":{"colorbar":{"outlinewidth":0,"ticks":""}},"marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scattermap":[{"type":"scattermap","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scattermapbox":[{"type":"scattermapbox","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatterternary":[{"type":"scatterternary","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scattercarpet":[{"type":"scattercarpet","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"carpet":[{"aaxis":{"endlinecolor":"#2a3f5f","gridcolor":"white","linecolor":"white","minorgridcolor":"white","startlinecolor":"#2a3f5f"},"baxis":{"endlinecolor":"#2a3f5f","gridcolor":"white","linecolor":"white","minorgridcolor":"white","startlinecolor":"#2a3f5f"},"type":"carpet"}],"table":[{"cells":{"fill":{"color":"#EBF0F8"},"line":{"color":"white"}},"header":{"fill":{"color":"#C8D4E3"},"line":{"color":"white"}},"type":"table"}],"barpolar":[{"marker":{"line":{"color":"#E5ECF6","width":0.5},"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"barpolar"}],"pie":[{"automargin":true,"type":"pie"}]},"layout":{"autotypenumbers":"strict","colorway":["#636efa","#EF553B","#00cc96","#ab63fa","#FFA15A","#19d3f3","#FF6692","#B6E880","#FF97FF","#FECB52"],"font":{"color":"#2a3f5f"},"hovermode":"closest","hoverlabel":{"align":"left"},"paper_bgcolor":"white","plot_bgcolor":"#E5ECF6","polar":{"bgcolor":"#E5ECF6","angularaxis":{"gridcolor":"white","linecolor":"white","ticks":""},"radialaxis":{"gridcolor":"white","linecolor":"white","ticks":""}},"ternary":{"bgcolor":"#E5ECF6","aaxis":{"gridcolor":"white","linecolor":"white","ticks":""},"baxis":{"gridcolor":"white","linecolor":"white","ticks":""},"caxis":{"gridcolor":"white","linecolor":"white","ticks":""}},"coloraxis":{"colorbar":{"outlinewidth":0,"ticks":""}},"colorscale":{"sequential":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"sequentialminus":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"diverging":[[0,"#8e0152"],[0.1,"#c51b7d"],[0.2,"#de77ae"],[0.3,"#f1b6da"],[0.4,"#fde0ef"],[0.5,"#f7f7f7"],[0.6,"#e6f5d0"],[0.7,"#b8e186"],[0.8,"#7fbc41"],[0.9,"#4d9221"],[1,"#276419"]]},"xaxis":{"gridcolor":"white","linecolor":"white","ticks":"","title":{"standoff":15},"zerolinecolor":"white","automargin":true,"zerolinewidth":2},"yaxis":{"gridcolor":"white","linecolor":"white","ticks":"","title":{"standoff":15},"zerolinecolor":"white","automargin":true,"zerolinewidth":2},"scene":{"xaxis":{"backgroundcolor":"#E5ECF6","gridcolor":"white","linecolor":"white","showbackground":true,"ticks":"","zerolinecolor":"white","gridwidth":2},"yaxis":{"backgroundcolor":"#E5ECF6","gridcolor":"white","linecolor":"white","showbackground":true,"ticks":"","zerolinecolor":"white","gridwidth":2},"zaxis":{"backgroundcolor":"#E5ECF6","gridcolor":"white","linecolor":"white","showbackground":true,"ticks":"","zerolinecolor":"white","gridwidth":2}},"shapedefaults":{"line":{"color":"#2a3f5f"}},"annotationdefaults":{"arrowcolor":"#2a3f5f","arrowhead":0,"arrowwidth":1},"geo":{"bgcolor":"white","landcolor":"#E5ECF6","subunitcolor":"white","showland":true,"showlakes":true,"lakecolor":"white"},"title":{"x":0.05},"mapbox":{"style":"light"}}},"xaxis":{"visible":false},"yaxis":{"visible":false,"autorange":"reversed"},"margin":{"l":20,"r":20,"t":50,"b":20},"title":{"text":"Follow \u2014 graphe de filiation"},"plot_bgcolor":"white"},                        {"displaylogo": false, "responsive": true, "modeBarButtonsToRemove": ["toImage"]}                    )                };            </script>        </div>
+        <script charset="utf-8" src="https://cdn.plot.ly/plotly-3.7.0.min.js" integrity="sha256-jvTGqxNp8AGWEcvNLVuKr+8j5dGe9Yw51LQkmDH+IYA=" crossorigin="anonymous"></script>                <div id="follow-graph" class="plotly-graph-div" style="height:100%; width:100%;"></div>            <script>                window.PLOTLYENV=window.PLOTLYENV || {};                                if (document.getElementById("follow-graph")) {                    Plotly.newPlot(                        "follow-graph",                        [{"hoverinfo":"none","line":{"color":"#b0b0b0","width":1.5},"mode":"lines","showlegend":false,"x":[0.0,0.0,null],"y":[0.0,1.0,null],"type":"scatter"},{"hoverinfo":"text","hovertext":["LOT-A - split factoriel 5x5 (dose x temperature de recuit)\u003cbr\u003eid: exp_2c1d290ca47980fb\u003cbr\u003ebranche: main\u003cbr\u003estatut: concluded\u003cbr\u003eintention: Quelle combinaison dose d'implantation \u002f temperature de recuit minimise la resistance de couche ?","LOT-B - confirmation a dose=6e14\u002f1000C sur 5 wafers\u003cbr\u003eid: exp_6cb7efef7dd41fcd\u003cbr\u003ebranche: main\u003cbr\u003estatut: concluded\u003cbr\u003eintention: La combinaison gagnante du plan factoriel est-elle reproductible sur un lot homogene ?"],"marker":{"color":["#2ca02c","#2ca02c"],"line":{"color":"#333333","width":1},"size":20},"mode":"markers+text","showlegend":false,"text":["LOT-A - split factoriel 5x5 (dose x temperature de recuit)","LOT-B - confirmation a dose=6e14\u002f1000C sur 5 wafers"],"textposition":"top center","x":[0.0,0.0],"y":[0.0,1.0],"type":"scatter"},{"hoverinfo":"none","mode":"text","showlegend":false,"text":["\u2325 main"],"textfont":{"color":"#8a6d00","size":11},"x":[0.0],"y":[0.7],"type":"scatter"}],                        {"template":{"data":{"histogram2dcontour":[{"type":"histogram2dcontour","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"choropleth":[{"type":"choropleth","colorbar":{"outlinewidth":0,"ticks":""}}],"histogram2d":[{"type":"histogram2d","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"heatmap":[{"type":"heatmap","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"contourcarpet":[{"type":"contourcarpet","colorbar":{"outlinewidth":0,"ticks":""}}],"contour":[{"type":"contour","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"surface":[{"type":"surface","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"mesh3d":[{"type":"mesh3d","colorbar":{"outlinewidth":0,"ticks":""}}],"scatter":[{"fillpattern":{"fillmode":"overlay","size":10,"solidity":0.2},"type":"scatter"}],"parcoords":[{"type":"parcoords","line":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatterpolargl":[{"type":"scatterpolargl","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"bar":[{"error_x":{"color":"#2a3f5f"},"error_y":{"color":"#2a3f5f"},"marker":{"line":{"color":"#E5ECF6","width":0.5},"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"bar"}],"scattergeo":[{"type":"scattergeo","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatterpolar":[{"type":"scatterpolar","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"histogram":[{"marker":{"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"histogram"}],"scattergl":[{"type":"scattergl","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatter3d":[{"type":"scatter3d","line":{"colorbar":{"outlinewidth":0,"ticks":""}},"marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scattermap":[{"type":"scattermap","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scattermapbox":[{"type":"scattermapbox","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatterternary":[{"type":"scatterternary","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scattercarpet":[{"type":"scattercarpet","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"carpet":[{"aaxis":{"endlinecolor":"#2a3f5f","gridcolor":"white","linecolor":"white","minorgridcolor":"white","startlinecolor":"#2a3f5f"},"baxis":{"endlinecolor":"#2a3f5f","gridcolor":"white","linecolor":"white","minorgridcolor":"white","startlinecolor":"#2a3f5f"},"type":"carpet"}],"table":[{"cells":{"fill":{"color":"#EBF0F8"},"line":{"color":"white"}},"header":{"fill":{"color":"#C8D4E3"},"line":{"color":"white"}},"type":"table"}],"barpolar":[{"marker":{"line":{"color":"#E5ECF6","width":0.5},"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"barpolar"}],"pie":[{"automargin":true,"type":"pie"}]},"layout":{"autotypenumbers":"strict","colorway":["#636efa","#EF553B","#00cc96","#ab63fa","#FFA15A","#19d3f3","#FF6692","#B6E880","#FF97FF","#FECB52"],"font":{"color":"#2a3f5f"},"hovermode":"closest","hoverlabel":{"align":"left"},"paper_bgcolor":"white","plot_bgcolor":"#E5ECF6","polar":{"bgcolor":"#E5ECF6","angularaxis":{"gridcolor":"white","linecolor":"white","ticks":""},"radialaxis":{"gridcolor":"white","linecolor":"white","ticks":""}},"ternary":{"bgcolor":"#E5ECF6","aaxis":{"gridcolor":"white","linecolor":"white","ticks":""},"baxis":{"gridcolor":"white","linecolor":"white","ticks":""},"caxis":{"gridcolor":"white","linecolor":"white","ticks":""}},"coloraxis":{"colorbar":{"outlinewidth":0,"ticks":""}},"colorscale":{"sequential":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"sequentialminus":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"diverging":[[0,"#8e0152"],[0.1,"#c51b7d"],[0.2,"#de77ae"],[0.3,"#f1b6da"],[0.4,"#fde0ef"],[0.5,"#f7f7f7"],[0.6,"#e6f5d0"],[0.7,"#b8e186"],[0.8,"#7fbc41"],[0.9,"#4d9221"],[1,"#276419"]]},"xaxis":{"gridcolor":"white","linecolor":"white","ticks":"","title":{"standoff":15},"zerolinecolor":"white","automargin":true,"zerolinewidth":2},"yaxis":{"gridcolor":"white","linecolor":"white","ticks":"","title":{"standoff":15},"zerolinecolor":"white","automargin":true,"zerolinewidth":2},"scene":{"xaxis":{"backgroundcolor":"#E5ECF6","gridcolor":"white","linecolor":"white","showbackground":true,"ticks":"","zerolinecolor":"white","gridwidth":2},"yaxis":{"backgroundcolor":"#E5ECF6","gridcolor":"white","linecolor":"white","showbackground":true,"ticks":"","zerolinecolor":"white","gridwidth":2},"zaxis":{"backgroundcolor":"#E5ECF6","gridcolor":"white","linecolor":"white","showbackground":true,"ticks":"","zerolinecolor":"white","gridwidth":2}},"shapedefaults":{"line":{"color":"#2a3f5f"}},"annotationdefaults":{"arrowcolor":"#2a3f5f","arrowhead":0,"arrowwidth":1},"geo":{"bgcolor":"white","landcolor":"#E5ECF6","subunitcolor":"white","showland":true,"showlakes":true,"lakecolor":"white"},"title":{"x":0.05},"mapbox":{"style":"light"}}},"xaxis":{"visible":false},"yaxis":{"visible":false,"autorange":"reversed"},"margin":{"l":20,"r":20,"t":50,"b":20},"title":{"text":"Follow \u2014 graphe de filiation"},"plot_bgcolor":"white"},                        {"displaylogo": false, "responsive": true, "modeBarButtonsToRemove": ["toImage"]}                    )                };            </script>        </div>
       </div>
     </div>
   </section>
 
   <section class="section">
     <div class="section-head">
-      <div class="section-label">LOT-A - vue expérience</div>
+      <div class="section-label">LOT-A</div>
       <h2 class="section-title">LOT-A - split factoriel 5x5 (dose x temperature de recuit)</h2>
       <p class="section-desc">
-        La fiche ci-dessous est la vue "une expérience" habituelle. En dessous, la même
-        expérience "explosée" par <code>analyze_batch(lot.wafers)</code> : ce qui est
-        constant sur les 25 wafers, et ce qui varie réellement (les deux facteurs du plan).
+        Une seule fiche, lue de haut en bas : résumé et objectifs, le split lui-même (25
+        wafers, généré par <code>full_factorial</code>), les résultats reliés à leurs preuves
+        (mesure brute + notebook d'analyse), puis la conclusion et la suite.
       </p>
     </div>
     <div class="fiche-card">
       <div class="fiche-top">
         <div>
           <div class="fiche-title">LOT-A - split factoriel 5x5 (dose x temperature de recuit)</div>
-          <div class="fiche-id">exp_37b8103cb202977f · branche main</div>
+          <div class="fiche-id">exp_2c1d290ca47980fb · branche main</div>
         </div>
         <div class="fiche-badges">
           <span class="badge">concluded</span>
-          <span class="badge">branch</span>
+          <span class="badge">branch (exploration)</span>
         </div>
       </div>
 
       <div class="fiche-row">
         <div class="fiche-label">Intention</div>
-        <p class="fiche-text">Quelle combinaison dose d'implantation / temperature de recuit minimise la resistance de couche ?</p>
+        <p class="fiche-text">Quelle combinaison dose d&#x27;implantation / temperature de recuit minimise la resistance de couche ?</p>
       </div>
 
-      <div class="fiche-row">
-        <div class="fiche-label">Conclusion</div>
-        <p class="fiche-text">Le minimum de resistance de couche (76 ohm/sq) est obtenu au wafer #13 (dose=6e14 cm^-2, recuit=1000C) - au centre du plan, coherent avec un optimum d'activation electrique. Un lot de confirmation est necessaire avant promotion.</p>
+    <div class="fiche-row">
+      <div class="fiche-label">Objectifs de l'étude</div>
+      <div class="table-scroll">
+        <table class="source-table">
+          <thead><tr><th>Objectif</th><th>Direction</th><th>Cible</th><th>Justification</th></tr></thead>
+          <tbody>
+            <tr><td>Resistance de couche</td><td>minimize</td><td>cible 80.0</td><td>Cible process standard pour cette etape d&#x27;implantation - en dessous, le contact ohmique est fiable.</td></tr>
+          </tbody>
+        </table>
       </div>
     </div>
-    <div class="fiche-card">
-      <div class="fiche-top">
-        <div>
-          <div class="fiche-title">LOT-A explosé - 25 wafers</div>
-          <div class="fiche-id">25 entités · 2 paramètre(s) variable(s)</div>
-        </div>
-      </div>
+    <div class="fiche-row">
+      <div class="fiche-label">Split (25 wafers) (25 entités · 2 paramètre(s) variable(s))</div>
       <div class="fiche-row">
         <div class="fiche-label">Paramètres constants (identiques sur les 25 entités)</div>
         <div class="fiche-text"><div>anneal_duration : 30 min</div></div>
@@ -238,23 +257,44 @@ h1 { font: 800 clamp(30px, 4.2vw, 46px)/1.08 "Archivo", sans-serif; text-wrap: b
         </table>
       </div>
     </div>
+    <div class="fiche-row">
+      <div class="fiche-label">Résultats &amp; preuves</div>
+      <div class="table-scroll">
+        <table class="source-table">
+          <thead><tr><th>Objectif</th><th>Verdict</th><th>Observé</th><th>Raisonnement</th><th>Preuve</th></tr></thead>
+          <tbody>
+            <tr><td>Resistance de couche</td><td><span class="result-verdict met"><span class="dot"></span>met</span></td><td>76 ohm/sq</td><td>Wafer #13, en dessous de la cible de 80 ohm/sq ; confirme par l&#x27;ANOVA du notebook joint.</td><td><a class="evidence-link" href="file:///fab/lot-a/measurements.csv">Mesures 4 pointes brutes, 25 wafers</a>, <a class="evidence-link" href="notebook:///analysis/lot_a_doe_analysis.ipynb">Notebook d&#x27;analyse (ANOVA, surface de reponse dose x temperature)</a></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+      <div class="fiche-row">
+        <div class="fiche-label">Conclusion</div>
+        <p class="fiche-text">Le minimum de resistance de couche (76 ohm/sq) est obtenu au wafer #13 (dose=6e14 cm^-2, recuit=1000C) - au centre du plan, coherent avec un optimum d&#x27;activation electrique. L&#x27;ANOVA (notebook joint) confirme les deux facteurs significatifs, sans interaction dose x temperature.</p>
+      </div>
+
+      <div class="fiche-row">
+        <div class="fiche-label">Suite</div>
+        <div class="next-steps"><span class="label">Prochaine étape</span><span class="text">Lancer un lot de confirmation homogene a dose=6e14 cm^-2 / 1000C pour valider la reproductibilite avant promotion en production.</span></div>
+      </div>
+    </div>
   </section>
 
   <section class="section">
     <div class="section-head">
-      <div class="section-label">LOT-B - vue expérience</div>
+      <div class="section-label">LOT-B</div>
       <h2 class="section-title">LOT-B - confirmation a dose=6e14/1000C sur 5 wafers</h2>
       <p class="section-desc">
-        Le lot de confirmation n'a plus qu'une seule combinaison : <code>analyze_batch</code>
-        le signale comme uniforme (<code>is_uniform</code>), l'autre moitié de l'affichage
-        hybride - rien à explorer, juste confirmer.
+        Le lot de confirmation n'a plus qu'une seule combinaison : le split intégré à la fiche
+        ressort <code>is_uniform</code> - rien à explorer, juste confirmer.
       </p>
     </div>
     <div class="fiche-card">
       <div class="fiche-top">
         <div>
           <div class="fiche-title">LOT-B - confirmation a dose=6e14/1000C sur 5 wafers</div>
-          <div class="fiche-id">exp_fdaa904ec6d5c17c · branche main</div>
+          <div class="fiche-id">exp_6cb7efef7dd41fcd · branche main</div>
         </div>
         <div class="fiche-badges">
           <span class="badge">concluded</span>
@@ -269,25 +309,48 @@ h1 { font: 800 clamp(30px, 4.2vw, 46px)/1.08 "Archivo", sans-serif; text-wrap: b
       </div>
 
       <div class="fiche-row">
-        <div class="fiche-label">Parents (commit de fusion — deux ascendances)</div>
+        <div class="fiche-label">Filiation</div>
         <div class="parent-pills">
-          <div class="parent-pill"><span class="role">parent · main</span><span class="lbl">exp_37b8103c — LOT-A - split factoriel 5x5 (dose x temperature de recuit)</span></div>
+          <div class="parent-pill"><span class="role">parent · main</span><span class="lbl">exp_2c1d290c — LOT-A - split factoriel 5x5 (dose x temperature de recuit)</span></div>
         </div>
       </div>
 
-      <div class="fiche-row">
-        <div class="fiche-label">Conclusion</div>
-        <p class="fiche-text">Reproductible : les 5 wafers du lot de confirmation restent tous dans 75-79 ohm/sq. Combinaison retenue pour la production.</p>
+    <div class="fiche-row">
+      <div class="fiche-label">Objectifs de l'étude</div>
+      <div class="table-scroll">
+        <table class="source-table">
+          <thead><tr><th>Objectif</th><th>Direction</th><th>Cible</th><th>Justification</th></tr></thead>
+          <tbody>
+            <tr><td>Resistance de couche</td><td>minimize</td><td>cible 80.0</td><td>Cible process standard pour cette etape d&#x27;implantation - en dessous, le contact ohmique est fiable.</td></tr>
+          </tbody>
+        </table>
       </div>
     </div>
-    <div class="fiche-card">
-      <div class="fiche-top">
-        <div>
-          <div class="fiche-title">LOT-B explosé - 5 wafers</div>
-          <div class="fiche-id">5 entités · 0 paramètre(s) variable(s)</div>
-        </div>
-      </div>
+    <div class="fiche-row">
+      <div class="fiche-label">Split (5 wafers) (5 entités · 0 paramètre(s) variable(s))</div>
       <p class="fiche-text">Aucune variation : les entités sont identiques sur tous les paramètres relevés.</p>
+    </div>
+    <div class="fiche-row">
+      <div class="fiche-label">Résultats &amp; preuves</div>
+      <div class="table-scroll">
+        <table class="source-table">
+          <thead><tr><th>Objectif</th><th>Verdict</th><th>Observé</th><th>Raisonnement</th><th>Preuve</th></tr></thead>
+          <tbody>
+            <tr><td>Resistance de couche</td><td><span class="result-verdict met"><span class="dot"></span>met</span></td><td>77 ohm/sq</td><td>Moyenne du lot de confirmation, sous la cible de 80 ohm/sq.</td><td><a class="evidence-link" href="file:///fab/lot-b/measurements.csv">Mesures 4 pointes brutes, 5 wafers</a>, <a class="evidence-link" href="notebook:///analysis/lot_b_confirmation_analysis.ipynb">Notebook d&#x27;analyse (repetabilite, ecart-type inter-wafer)</a></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+      <div class="fiche-row">
+        <div class="fiche-label">Conclusion</div>
+        <p class="fiche-text">Reproductible : les 5 wafers du lot de confirmation restent tous dans 75-79 ohm/sq, ecart-type inter-wafer negligeable (notebook joint). Combinaison retenue pour la production.</p>
+      </div>
+
+      <div class="fiche-row">
+        <div class="fiche-label">Suite</div>
+        <div class="next-steps"><span class="label">Prochaine étape</span><span class="text">Transferer la combinaison (6e14 cm^-2 / 1000C) en production ; documenter la fenetre de process dans la fiche produit.</span></div>
+      </div>
     </div>
   </section>
 

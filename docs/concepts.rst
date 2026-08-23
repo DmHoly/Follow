@@ -58,8 +58,13 @@ committé, adressé par un identifiant dérivé de son propre contenu
 - ``objectives`` (:class:`~follow.models.Objective`) — ce qu'on cherche à atteindre,
 - ``references`` (:class:`~follow.models.ReferenceLink`) — les points de comparaison,
 - ``evidence`` (:class:`~follow.models.Evidence`) — des pointeurs vers des données externes,
-  jamais les données elles-mêmes,
-- ``conclusion`` (:class:`~follow.models.Conclusion`) — le verdict, par objectif.
+  jamais les données elles-mêmes (un fichier de mesures, un notebook d'analyse...),
+- ``conclusion`` (:class:`~follow.models.Conclusion`) — le verdict par objectif
+  (:class:`~follow.models.ObjectiveResult`, avec ``evidence_ids`` : quelle(s) preuve(s) précise(s)
+  justifient ce verdict — Follow n'analyse jamais rien lui-même, il ne fait que relier verdict et
+  preuve), un ``decision`` catégoriel (promote/branch/replicate/abandon/inconclusive), et
+  ``next_steps`` en texte libre pour la suite. Voir :doc:`report` pour comment tout cela se lit
+  ensemble dans une fiche (:func:`~follow.report.experiment_fiche`).
 
 On ne construit jamais un ``Experiment`` directement : on passe par un
 :class:`~follow.repository.ExperimentBuilder` (mutable, l'équivalent de l'arbre de travail

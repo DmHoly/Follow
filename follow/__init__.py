@@ -29,7 +29,7 @@ from .models import (
 )
 from .quantity import Quantity
 from .rendering import render_fiche, render_log
-from .report import batch_table, render_study_html
+from .report import batch_table, experiment_fiche, render_study_html
 from .repository import ExperimentBuilder, ExperimentNotFoundError, FollowError, NothingToCommitError, Repository
 from .structure import Structure
 
@@ -64,6 +64,7 @@ __all__ = [
     "build_graph_figure",
     "check_identifiability",
     "diff_structures",
+    "experiment_fiche",
     "format_value",
     "fractional_factorial",
     "full_factorial",
