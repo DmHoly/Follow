@@ -156,17 +156,3 @@ def render_log(repo: "Repository", ref: str) -> str:
     return "\n".join(lines)
 
 
-def render_dot(repo: "Repository") -> str:
-    """The full experiment graph (lineage + branch tips) as Graphviz DOT source."""
-    lines = ["digraph follow {", '  rankdir="BT";', "  node [shape=box, fontname=\"monospace\"];"]
-    for exp in repo:
-        label = f"{exp.title}\\n{exp.id}".replace('"', '\\"')
-        lines.append(f'  "{exp.id}" [label="{label}"];')
-        for parent in exp.parents:
-            lines.append(f'  "{exp.id}" -> "{parent}";')
-    for name, exp_id in repo.branches.items():
-        node = f"branch:{name}"
-        lines.append(f'  "{node}" [shape=note, style=filled, fillcolor=lightyellow, label="{name}"];')
-        lines.append(f'  "{node}" -> "{exp_id}" [style=dashed];')
-    lines.append("}")
-    return "\n".join(lines)

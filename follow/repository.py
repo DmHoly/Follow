@@ -104,6 +104,29 @@ class ExperimentBuilder:
     def commit(self) -> Experiment:
         return self.repo._commit(self)
 
+    def to_draft(self) -> dict[str, Any]:
+        """Dump this builder to a plain JSON-able dict: the "working tree" file a CLI user
+        edits by hand (adding steps, evidence, a conclusion...) before ``follow commit``.
+        See :meth:`Repository.load_draft` for the reverse operation.
+        """
+        return {
+            "branch": self.branch,
+            "parents": self.parents,
+            "structure_type": type(self.structure).registry_key(),
+            "structure": self.structure.model_dump(mode="json"),
+            "title": self.title,
+            "intent": self.intent,
+            "author": self.author,
+            "hypothesis": self.hypothesis,
+            "references": [r.model_dump(mode="json") for r in self.references],
+            "objectives": [o.model_dump(mode="json") for o in self.objectives],
+            "steps": [s.model_dump(mode="json") for s in self.steps],
+            "evidence": [e.model_dump(mode="json") for e in self.evidence],
+            "conclusion": self.conclusion.model_dump(mode="json"),
+            "tags": self.tags,
+            "metadata": self.metadata,
+        }
+
 
 class Repository:
     """A store of experiments and the branches/tags pointing into their lineage - Follow's
@@ -253,6 +276,32 @@ class Repository:
         )
         if not any(r.role == "baseline" for r in builder.references):
             builder.add_reference(role="baseline", experiment_id=parent.id, label=f"parent: {parent.title}")
+        return builder
+
+    def load_draft(self, payload: dict[str, Any]) -> ExperimentBuilder:
+        """Rebuild an :class:`ExperimentBuilder` from a draft dict produced by
+        :meth:`ExperimentBuilder.to_draft`. ``payload["structure_type"]`` must already be
+        registered (i.e. its module has been imported) or :class:`KeyError` is raised.
+        """
+        structure_cls = Structure.resolve(payload["structure_type"])
+        builder = ExperimentBuilder(
+            self,
+            branch=payload["branch"],
+            parents=list(payload.get("parents", [])),
+            structure=structure_cls.model_validate(payload["structure"]),
+            title=payload["title"],
+            intent=payload["intent"],
+            author=payload.get("author"),
+            hypothesis=payload.get("hypothesis"),
+            references=[ReferenceLink.model_validate(r) for r in payload.get("references", [])],
+            objectives=[Objective.model_validate(o) for o in payload.get("objectives", [])],
+            steps=[Step.model_validate(s) for s in payload.get("steps", [])],
+            tags=list(payload.get("tags", [])),
+            metadata=dict(payload.get("metadata", {})),
+        )
+        builder.evidence = [Evidence.model_validate(e) for e in payload.get("evidence", [])]
+        if payload.get("conclusion"):
+            builder.conclusion = Conclusion.model_validate(payload["conclusion"])
         return builder
 
     def branch(self, name: str, at: str) -> None:

@@ -1,5 +1,6 @@
 from .diffing import DiffEntry, StructureDiff, diff_structures
 from .formatting import format_value, is_quantity_leaf
+from .graphing import build_graph_figure, render_graph_html
 from .models import (
     Conclusion,
     Evidence,
@@ -10,7 +11,7 @@ from .models import (
     Step,
 )
 from .quantity import Quantity
-from .rendering import render_dot, render_fiche, render_log
+from .rendering import render_fiche, render_log
 from .repository import ExperimentBuilder, ExperimentNotFoundError, FollowError, Repository
 from .structure import Structure
 
@@ -23,8 +24,6 @@ __all__ = [
     "ExperimentNotFoundError",
     "FollowError",
     "Objective",
-    "format_value",
-    "is_quantity_leaf",
     "ObjectiveResult",
     "Quantity",
     "ReferenceLink",
@@ -32,8 +31,11 @@ __all__ = [
     "Step",
     "Structure",
     "StructureDiff",
+    "build_graph_figure",
     "diff_structures",
-    "render_dot",
+    "format_value",
+    "is_quantity_leaf",
     "render_fiche",
+    "render_graph_html",
     "render_log",
 ]

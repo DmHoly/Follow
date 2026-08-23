@@ -1,5 +1,5 @@
 from examples.recipe import BakeStep, CakeRecipe
-from follow import Quantity, Repository, render_dot, render_fiche, render_log
+from follow import Quantity, Repository, render_fiche, render_log
 
 
 def _cake(flour_g: float) -> CakeRecipe:
@@ -52,11 +52,3 @@ def test_render_log_lists_history_oldest_last():
     assert lines[0].startswith(variant_id)
     assert lines[1].startswith(baseline_id)
 
-
-def test_render_dot_includes_nodes_and_branch_pointer():
-    repo, baseline_id, variant_id = _repo_with_history()
-    dot = render_dot(repo)
-    assert dot.startswith("digraph follow {")
-    assert baseline_id in dot
-    assert variant_id in dot
-    assert "branch:main" in dot

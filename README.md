@@ -97,9 +97,59 @@ print(render_fiche(committed, repo))       # la "fiche" façon git show
 print(repo.diff(baseline.id, committed.id))  # uniquement les paramètres qui ont varié
 ```
 
-`repo.log("main")`, `repo.branch(...)`, `repo.tag(...)` et `render_dot(repo)` (export Graphviz du
-graphe de filiation complet) complètent l'API — voir les docstrings de `follow/repository.py` et
-`follow/rendering.py`.
+`repo.log("main")`, `repo.branch(...)`, `repo.tag(...)` et `render_graph_html(repo, "graph.html")`
+(graphe de filiation interactif, voir plus bas) complètent l'API — voir les docstrings de
+`follow/repository.py` et `follow/rendering.py`.
+
+## CLI façon git
+
+Après `uv pip install -e .`, la commande `follow` est disponible. Le principe suit celui de git :
+un brouillon JSON joue le rôle de l'arbre de travail (on l'édite à la main — ajout d'étapes, de
+preuves, écriture de la conclusion une fois l'expérience réellement menée), puis `follow commit`
+le fige dans le dépôt.
+
+```bash
+follow init mon_labo
+
+follow new --repo mon_labo \
+  --branch main --title Baseline --intent "Établir une référence" \
+  --structure-type examples.recipe.CakeRecipe --structure-file cake.json \
+  --out draft.json
+# éditer draft.json à la main si besoin (étapes, objectifs, preuves...)
+follow commit draft.json --repo mon_labo
+# -> exp_xxxxxxxx  (main)  Baseline
+
+follow derive exp_xxxxxxxx --repo mon_labo \
+  --title "Plus de farine" --intent "Plus de farine améliore-t-elle la levée ?" \
+  --out variant.json
+# variant.json hérite la structure + une référence "baseline" automatique vers le parent
+# -> éditer variant.json : changer la farine, ajouter evidence + conclusion
+follow commit variant.json --repo mon_labo
+
+follow log main --repo mon_labo          # historique de la branche
+follow show exp_yyyyyyyy --repo mon_labo # la fiche complète (façon `git show`)
+follow diff exp_xxxxxxxx exp_yyyyyyyy --repo mon_labo  # uniquement ce qui a varié
+follow branch --repo mon_labo            # lister les branches
+follow branch essai --at exp_yyyyyyyy --repo mon_labo  # créer/déplacer une branche
+follow tag championne --at exp_yyyyyyyy --repo mon_labo
+follow graph --repo mon_labo --out graph.html --open
+```
+
+`--structure-type` attend un chemin pointé Python (`module.Classe`) : la CLI importe ce module à
+la volée pour retrouver la classe `Structure` enregistrée, donc vos domaines (`examples/recipe.py`
+et consorts) doivent être importables (présents dans le répertoire courant ou installés).
+
+`follow --help` / `follow <sous-commande> --help` détaille chaque option.
+
+## Graphe de filiation
+
+`follow graph` (ou `render_graph_html`/`build_graph_figure` en Python) exporte le graphe complet
+en un unique fichier HTML autonome via **Plotly** — pas de Graphviz, pas de binaire système à
+installer. La mise en page est une simple disposition en couches (une rangée par génération,
+un nœud positionné par la moyenne des positions de ses parents) : suffisante pour lire la
+filiation et les embranchements sans dépendre d'un moteur de layout externe. Les nœuds sont
+colorés par statut de conclusion (`draft`/`running`/`concluded`/`abandoned`) et chaque pointe de
+branche est étiquetée.
 
 ## Développer
 
