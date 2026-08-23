@@ -18,9 +18,11 @@ from typing import Any
 from pydantic import ValidationError
 
 from . import __version__
+from .batch import analyze_batch
+from .formatting import format_value
 from .graphing import render_graph_html
 from .rendering import render_fiche, render_log
-from .report import render_study_html
+from .report import batch_table, render_page, render_study_html
 from .repository import FollowError, Repository
 from .structure import Structure
 
@@ -286,6 +288,64 @@ def cmd_graph(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_explode(args: argparse.Namespace) -> int:
+    repo = _repo(args.repo)
+    try:
+        experiment = repo.get(args.ref)
+    except FollowError as exc:
+        return _fail(str(exc))
+    _load_structure_class(experiment.structure_type)
+    structure = repo.load_structure(experiment)
+
+    entities: Any = structure
+    for part in args.path.split("."):
+        try:
+            entities = getattr(entities, part)
+        except AttributeError:
+            return _fail(f"{args.path!r} n'existe pas sur la structure de {experiment.id}")
+    if not isinstance(entities, list):
+        return _fail(f"{args.path!r} n'est pas une liste d'entités (type: {type(entities).__name__})")
+
+    try:
+        variation = analyze_batch(entities, ignore=args.ignore)
+    except (KeyError, IndexError, TypeError) as exc:
+        return _fail(f"entités hétérogènes dans {args.path!r}: {exc}")
+
+    if args.out is not None:
+        section = batch_table(variation, title=f"{experiment.title} — {args.path}")
+        html = render_page(
+            title=f"{experiment.title} — {args.path}",
+            description=f"Vue explosée de {args.path!r} pour l'expérience {experiment.id}.",
+            eyebrow="Follow · vue explosée",
+            heading=f"{experiment.title} — {args.path}",
+            subtitle=f"{variation.entity_count} entités, {len(variation.varying)} paramètre(s) variable(s).",
+            stat_chips=[f"<b>{variation.entity_count}</b> entités", f"<b>{len(variation.varying)}</b> variables"],
+            sections=[f'  <section class="section">\n{section}\n  </section>'],
+            footer="",
+        )
+        out = Path(args.out)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(html, encoding="utf-8")
+        print(f"Vue explosée écrite dans {out}")
+        if args.open:
+            webbrowser.open(out.resolve().as_uri())
+        return 0
+
+    print(f"{variation.entity_count} entités  ·  {len(variation.constant)} constant(s)  ·  {len(variation.varying)} variable(s)")
+    if variation.constant:
+        print("\nconstants:")
+        for path, value in variation.constant.items():
+            print(f"  {path}: {format_value(value)}")
+    if variation.varying:
+        print("\nvariables:")
+        for factor in variation.varying:
+            values = ", ".join(format_value(v) for v in factor.values)
+            print(f"  {factor.path}: [{values}]")
+    else:
+        print("\n(aucune variation - toutes les entités sont identiques)")
+    return 0
+
+
 def cmd_report(args: argparse.Namespace) -> int:
     repo = _repo(args.repo)
     if args.ref is not None and args.ref not in repo:
@@ -416,6 +476,21 @@ def build_parser() -> argparse.ArgumentParser:
     p_graph.add_argument("--out", default="graph.html")
     p_graph.add_argument("--open", action="store_true", help="ouvrir le fichier dans le navigateur")
     p_graph.set_defaults(func=cmd_graph)
+
+    p_explode = subparsers.add_parser(
+        "explode",
+        help="éclater une liste d'entités d'une expérience (DOE) en baseline constante + facteurs variables",
+    )
+    add_repo_arg(p_explode)
+    p_explode.add_argument("ref", help="id, branche ou tag de l'expérience")
+    p_explode.add_argument("path", help="champ liste de la structure à éclater, ex. wafers")
+    p_explode.add_argument(
+        "--ignore", action="append", default=[], metavar="FIELD",
+        help="champ d'identité à exclure de la comparaison (ex. un numéro de slot); répétable",
+    )
+    p_explode.add_argument("--out", help="écrire une page HTML au lieu d'afficher un résumé texte")
+    p_explode.add_argument("--open", action="store_true", help="ouvrir le fichier HTML dans le navigateur (avec --out)")
+    p_explode.set_defaults(func=cmd_explode)
 
     p_report = subparsers.add_parser(
         "report", help="générer un compte rendu d'étude complet (HTML, sans IA, dérivé du dépôt)"

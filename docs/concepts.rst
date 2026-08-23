@@ -33,7 +33,17 @@ avec le nombre, et les diffs restent lisibles (un ``Quantity`` est traité comme
 feuille, pas comme plusieurs champs indépendants).
 
 Voir ``examples/`` dans le dépôt pour des domaines complets : ``recipe.py``, ``mosfet.py``,
-``solar_cell.py``, ``chocolate_fondant.py``.
+``solar_cell.py``, ``chocolate_fondant.py``, ``wafer_doe.py``.
+
+Cas particulier : une expérience, N variantes (``list[SousStructure]``)
+--------------------------------------------------------------------------
+
+Rien n'empêche une ``Structure`` de contenir une liste d'entités du même genre plutôt qu'une
+seule (un lot de 25 wafers en plan factoriel, une série de moules de recette, un jeu de formes
+de lentille...) : c'est toujours une seule expérience — une intention, un protocole, une
+conclusion — mais avec plusieurs variantes structurelles à l'intérieur. Voir :doc:`batch` pour
+:func:`~follow.batch.analyze_batch`, qui sépare mécaniquement la base commune des paramètres qui
+varient réellement entre ces entités, et :func:`~follow.report.batch_table` pour l'afficher.
 
 Experiment : le nœud immuable
 -------------------------------

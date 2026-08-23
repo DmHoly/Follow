@@ -61,6 +61,12 @@ follow.report
 .. automodule:: follow.report
    :members:
 
+follow.batch
+---------------
+
+.. automodule:: follow.batch
+   :members:
+
 follow.ids
 -------------
 

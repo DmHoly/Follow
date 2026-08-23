@@ -47,6 +47,9 @@ Concepts
    * - :func:`~follow.report.render_study_html`
      - Compte rendu d'étude généré automatiquement, sans IA.
      - ``git log`` / un rapport CI
+   * - :func:`~follow.batch.analyze_batch`
+     - Une expérience, N variantes structurelles (DOE) : sépare la base commune des facteurs qui varient.
+     - — (pas d'équivalent git)
 
 .. toctree::
    :maxdepth: 2
@@ -55,6 +58,7 @@ Concepts
    quickstart
    concepts
    merging
+   batch
    report
    cli
 

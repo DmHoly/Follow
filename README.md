@@ -245,6 +245,36 @@ champ). Tout chemin non listé garde la valeur du premier réf (`ref_a`, la cibl
 exactement comme un hunk de `git merge` qu'on ne touche pas. Voir `Repository.merge` et
 `resolve_merge_paths` (`follow/merging.py`) côté Python.
 
+## Une expérience, N variantes (`follow explode`)
+
+Cas hors de portée de git : un plan d'expériences (DOE) factoriel réparti sur 25 wafers (ou 25
+moules de recette, 25 formes de lentille...) reste **une seule expérience** — une intention, un
+protocole, une conclusion — mais sa `Structure` contient une liste de 25 entités qui ont chacune
+reçu une combinaison différente de paramètres. `follow.batch.analyze_batch` sépare
+mécaniquement ce qui est constant sur toutes les entités de ce qui varie réellement (les
+facteurs du plan) ; `follow.report.batch_table` l'affiche comme un bloc « explosé » à poser à
+côté de la fiche habituelle de l'expérience — un affichage hybride, par expérience et par
+entité.
+
+```bash
+follow explode main wafers --ignore slot --repo mon_labo
+# 25 entités  ·  1 constant(s)  ·  2 variable(s)
+#
+# constants:
+#   anneal_duration: 30 min
+#
+# variables:
+#   implant_dose: [2 1e14 cm^-2, 2 1e14 cm^-2, ..., 10 1e14 cm^-2]
+#   anneal_temperature: [900 C, 950 C, ..., 1100 C]
+
+follow explode main wafers --ignore slot --repo mon_labo --out explode.html --open
+```
+
+`--ignore` exclut les champs d'identité (un numéro de slot, un id de série) qui diffèrent par
+construction sur chaque entité et empêcheraient sinon un lot réellement homogène (ex. un lot de
+confirmation) de ressortir comme uniforme. Voir `demos/wafer_doe.py` (plan factoriel 5×5 sur 25
+wafers, puis lot de confirmation) et `docs/batch.rst` côté Python.
+
 ## Générer une fiche/compte rendu d'étude (`follow report`)
 
 `follow report` transforme un dépôt (ou le lignage d'une branche) en une page HTML autonome,

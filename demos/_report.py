@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from follow.report import (
     THEME_CSS,
+    batch_table,
     fiche_card,
     render_page as render_report,
     resolution_conflict_row,
@@ -17,6 +18,7 @@ from follow.report import (
 
 __all__ = [
     "THEME_CSS",
+    "batch_table",
     "fiche_card",
     "render_report",
     "resolution_conflict_row",

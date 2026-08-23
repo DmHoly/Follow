@@ -17,6 +17,7 @@ from __future__ import annotations
 import html as _html
 from typing import TYPE_CHECKING, Any
 
+from .batch import BatchVariation
 from .diffing import StructureDiff
 from .formatting import format_value
 from .graphing import build_graph_figure
@@ -316,6 +317,69 @@ def fiche_card(
         <div class="fiche-label">Conclusion</div>
         <p class="fiche-text">{conclusion}</p>
       </div>
+    </div>"""
+
+
+def batch_table(
+    variation: BatchVariation,
+    *,
+    entity_labels: list[str] | None = None,
+    title: str = "Entités du lot",
+    uniform_note: str = "Aucune variation : les entités sont identiques sur tous les paramètres relevés.",
+) -> str:
+    """Render a :class:`~follow.batch.BatchVariation` (see :func:`follow.batch.analyze_batch`) as
+    the "hybrid display" a DOE-style experiment needs: the shared baseline (params identical on
+    every entity) as a flat list, and the varying DOE factors "exploded" into one row per
+    parameter, one column per entity.
+
+    This is a self-contained ``.fiche-card``-style block, meant to sit next to (not replace) the
+    experiment's regular :func:`fiche_card` - the fiche card is the one-experiment view, this is
+    the many-entities view of that same experiment. Callers are responsible for escaping
+    ``entity_labels``; the constant/varying values themselves come straight from repository data
+    and are escaped here.
+    """
+    labels = entity_labels or [f"Entité {i + 1}" for i in range(variation.entity_count)]
+    if variation.is_uniform:
+        body = f'      <p class="fiche-text">{_esc(uniform_note)}</p>'
+    else:
+        constant_html = ""
+        if variation.constant:
+            constant_items = "".join(
+                f"<div>{_esc(path)} : {_esc(format_value(value))}</div>" for path, value in variation.constant.items()
+            )
+            constant_html = (
+                '      <div class="fiche-row">\n'
+                '        <div class="fiche-label">Paramètres constants (identiques sur les {n} entités)</div>\n'
+                '        <div class="fiche-text">{items}</div>\n'
+                "      </div>\n"
+            ).format(n=variation.entity_count, items=constant_items)
+
+        header_cells = "".join(f"<th>{_esc(label)}</th>" for label in labels)
+        factor_rows = "\n".join(
+            "          <tr><td>{path}</td>{cells}</tr>".format(
+                path=_esc(factor.path),
+                cells="".join(f"<td>{_esc(format_value(value))}</td>" for value in factor.values),
+            )
+            for factor in variation.varying
+        )
+        body = (
+            f"{constant_html}"
+            '      <div class="table-scroll">\n'
+            '        <table class="source-table">\n'
+            f"          <thead><tr><th>Paramètre variable</th>{header_cells}</tr></thead>\n"
+            f"          <tbody>\n{factor_rows}\n          </tbody>\n"
+            "        </table>\n"
+            "      </div>"
+        )
+
+    return f"""    <div class="fiche-card">
+      <div class="fiche-top">
+        <div>
+          <div class="fiche-title">{_esc(title)}</div>
+          <div class="fiche-id">{variation.entity_count} entités · {len(variation.varying)} paramètre(s) variable(s)</div>
+        </div>
+      </div>
+{body}
     </div>"""
 
 

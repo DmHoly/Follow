@@ -1,5 +1,6 @@
 __version__ = "0.1.0"
 
+from .batch import BatchFactor, BatchVariation, analyze_batch
 from .diffing import DiffEntry, StructureDiff, diff_structures
 from .formatting import format_value, is_quantity_leaf
 from .graphing import build_graph_figure, render_graph_html
@@ -15,12 +16,14 @@ from .models import (
 )
 from .quantity import Quantity
 from .rendering import render_fiche, render_log
-from .report import render_study_html
+from .report import batch_table, render_study_html
 from .repository import ExperimentBuilder, ExperimentNotFoundError, FollowError, NothingToCommitError, Repository
 from .structure import Structure
 
 __all__ = [
     "__version__",
+    "BatchFactor",
+    "BatchVariation",
     "Conclusion",
     "DiffEntry",
     "Evidence",
@@ -37,6 +40,8 @@ __all__ = [
     "Step",
     "Structure",
     "StructureDiff",
+    "analyze_batch",
+    "batch_table",
     "build_graph_figure",
     "diff_structures",
     "format_value",

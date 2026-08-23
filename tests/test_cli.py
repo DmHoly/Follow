@@ -440,3 +440,71 @@ def test_log_with_a_negative_number_fails_clearly_instead_of_silently_slicing(tm
     assert main(["log", "main", "--repo", repo_path, "-n", "-1"]) == 1
     err = capsys.readouterr().err
     assert "positif" in err
+
+
+WAFER_LOT_STRUCT = {
+    "lot_id": "LOT-A",
+    "wafer_diameter": {"value": 200, "unit": "mm"},
+    "process": "implant+anneal",
+    "wafers": [
+        {"slot": 1, "implant_dose": {"value": 2, "unit": "1e14 cm^-2"}, "anneal_temperature": {"value": 900, "unit": "C"}, "anneal_duration": {"value": 30, "unit": "min"}},
+        {"slot": 2, "implant_dose": {"value": 4, "unit": "1e14 cm^-2"}, "anneal_temperature": {"value": 900, "unit": "C"}, "anneal_duration": {"value": 30, "unit": "min"}},
+        {"slot": 3, "implant_dose": {"value": 6, "unit": "1e14 cm^-2"}, "anneal_temperature": {"value": 900, "unit": "C"}, "anneal_duration": {"value": 30, "unit": "min"}},
+    ],
+}
+
+
+def _commit_wafer_lot(tmp_path, repo_path, capsys) -> str:
+    main(["init", repo_path])
+    capsys.readouterr()
+    struct_file = _write_json(tmp_path / "lot.json", WAFER_LOT_STRUCT)
+    draft = str(tmp_path / "draft.json")
+    main(
+        [
+            "new", "--repo", repo_path, "--branch", "main", "--title", "LOT-A", "--intent", "split factoriel",
+            "--structure-type", "examples.wafer_doe.WaferLot", "--structure-file", struct_file, "--out", draft,
+        ]
+    )
+    capsys.readouterr()
+    main(["commit", draft, "--repo", repo_path])
+    return capsys.readouterr().out.split()[0]
+
+
+def test_explode_prints_constant_and_varying_parameters(tmp_path, capsys):
+    repo_path = str(tmp_path / "repo")
+    _commit_wafer_lot(tmp_path, repo_path, capsys)
+
+    assert main(["explode", "main", "wafers", "--repo", repo_path, "--ignore", "slot"]) == 0
+    out = capsys.readouterr().out
+    assert "3 entités" in out
+    assert "anneal_temperature: 900 C" in out  # constant across all 3
+    assert "implant_dose: [2 1e14 cm^-2, 4 1e14 cm^-2, 6 1e14 cm^-2]" in out  # varying
+
+
+def test_explode_writes_an_html_page_with_out(tmp_path, capsys):
+    repo_path = str(tmp_path / "repo")
+    _commit_wafer_lot(tmp_path, repo_path, capsys)
+
+    out_file = str(tmp_path / "explode.html")
+    assert main(["explode", "main", "wafers", "--repo", repo_path, "--out", out_file]) == 0
+    html = Path(out_file).read_text()
+    assert "implant_dose" in html
+    assert "<style>" in html
+
+
+def test_explode_on_a_non_list_field_fails_clearly(tmp_path, capsys):
+    repo_path = str(tmp_path / "repo")
+    _commit_wafer_lot(tmp_path, repo_path, capsys)
+
+    assert main(["explode", "main", "lot_id", "--repo", repo_path]) == 1
+    err = capsys.readouterr().err
+    assert "n'est pas une liste" in err
+
+
+def test_explode_on_an_unknown_field_fails_clearly(tmp_path, capsys):
+    repo_path = str(tmp_path / "repo")
+    _commit_wafer_lot(tmp_path, repo_path, capsys)
+
+    assert main(["explode", "main", "does_not_exist", "--repo", repo_path]) == 1
+    err = capsys.readouterr().err
+    assert "does_not_exist" in err
