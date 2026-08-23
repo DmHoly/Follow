@@ -170,6 +170,8 @@ def cmd_commit(args: argparse.Namespace) -> int:
 
 
 def cmd_log(args: argparse.Namespace) -> int:
+    if args.number < 0:
+        return _fail("-n/--number doit être positif")
     repo = _repo(args.repo)
     try:
         history = repo.log(args.ref)

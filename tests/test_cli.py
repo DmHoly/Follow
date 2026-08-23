@@ -417,3 +417,25 @@ def test_init_on_a_path_that_is_a_file_fails_cleanly(tmp_path, capsys):
     err = capsys.readouterr().err
     assert "n'est pas un dossier" in err
     assert "Traceback" not in err
+
+
+def test_log_with_a_negative_number_fails_clearly_instead_of_silently_slicing(tmp_path, capsys):
+    repo_path = str(tmp_path / "repo")
+    main(["init", repo_path])
+    capsys.readouterr()
+
+    struct_file = _write_json(tmp_path / "cake.json", CAKE_STRUCT)
+    draft = str(tmp_path / "draft.json")
+    main(
+        [
+            "new", "--repo", repo_path, "--branch", "main", "--title", "v1", "--intent", "start",
+            "--structure-type", "examples.recipe.CakeRecipe", "--structure-file", struct_file, "--out", draft,
+        ]
+    )
+    capsys.readouterr()
+    main(["commit", draft, "--repo", repo_path])
+    capsys.readouterr()
+
+    assert main(["log", "main", "--repo", repo_path, "-n", "-1"]) == 1
+    err = capsys.readouterr().err
+    assert "positif" in err

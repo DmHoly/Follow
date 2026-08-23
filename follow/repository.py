@@ -452,6 +452,13 @@ class Repository:
         for parent_id in builder.parents:
             if parent_id not in self._objects:
                 raise ExperimentNotFoundError(parent_id)
+        for reference in builder.references:
+            # unlike external_source, experiment_id always means "an experiment in this
+            # repository" - a dangling one would silently disappear everywhere it's used
+            # (render_fiche's baseline diff, follow report's lineage section, ...) with no
+            # indication anything was wrong, so it's rejected here rather than at every call site.
+            if reference.experiment_id is not None and reference.experiment_id not in self._objects:
+                raise ExperimentNotFoundError(reference.experiment_id)
         self._ensure_branch_name_available(builder.branch)
 
         structure_type = type(builder.structure).registry_key()

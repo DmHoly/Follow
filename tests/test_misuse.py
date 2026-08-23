@@ -243,3 +243,22 @@ def test_merge_target_branch_moving_before_commit_is_rejected_not_silently_stale
         merge_builder.commit()
 
     assert repo.branches["main"] == a2.id
+
+
+def test_dangling_reference_experiment_id_is_rejected():
+    repo = Repository()
+    builder = repo.new(branch="main", structure=_cake(), title="v1", intent="x")
+    builder.add_reference(role="baseline", label="ghost", experiment_id="exp_does_not_exist")
+
+    with pytest.raises(ExperimentNotFoundError):
+        builder.commit()
+    assert len(repo) == 0
+
+
+def test_reference_to_a_real_experiment_is_fine():
+    repo = Repository()
+    v1 = repo.new(branch="main", structure=_cake(), title="v1", intent="x").commit()
+    builder = repo.new(branch="side", structure=_cake(), title="v2", intent="x")
+    builder.add_reference(role="benchmark", label="v1 for comparison", experiment_id=v1.id)
+    committed = builder.commit()
+    assert committed.references[0].experiment_id == v1.id
