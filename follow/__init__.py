@@ -1,3 +1,5 @@
+__version__ = "0.1.0"
+
 from .diffing import DiffEntry, StructureDiff, diff_structures
 from .formatting import format_value, is_quantity_leaf
 from .graphing import build_graph_figure, render_graph_html
@@ -18,6 +20,7 @@ from .repository import ExperimentBuilder, ExperimentNotFoundError, FollowError,
 from .structure import Structure
 
 __all__ = [
+    "__version__",
     "Conclusion",
     "DiffEntry",
     "Evidence",

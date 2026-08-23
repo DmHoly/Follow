@@ -1,0 +1,143 @@
+Référence CLI
+==============
+
+``follow`` est installée comme point d'entrée (``[project.scripts]``) dès que le paquet est
+installé. ``follow --version`` affiche la version ; ``follow <sous-commande> --help`` détaille
+chaque option directement depuis le terminal.
+
+Toutes les sous-commandes acceptent ``--repo CHEMIN`` (défaut : ``.follow``).
+
+Le principe d'authoring suit celui de git : ``new``/``derive``/``merge`` écrivent un
+**brouillon JSON** (l'équivalent de l'arbre de travail), qu'on édite à la main (étapes, preuves,
+conclusion une fois l'expérience réellement menée), puis ``commit`` le fige dans le dépôt.
+
+``follow init [chemin]``
+-------------------------
+
+Crée un nouveau dépôt (répertoire ``objects/`` + ``refs.json``). Échoue si le répertoire existe
+déjà et n'est pas vide.
+
+``follow new``
+----------------
+
+Démarre un brouillon d'expérience racine (sans parent).
+
+.. list-table::
+   :header-rows: 1
+
+   * - Option
+     - Description
+   * - ``--branch``
+     - Branche cible (requis).
+   * - ``--title`` / ``--intent``
+     - Requis.
+   * - ``--structure-type``
+     - Chemin pointé Python vers la classe :class:`~follow.structure.Structure`, ex. ``examples.recipe.CakeRecipe`` (requis).
+   * - ``--structure-file``
+     - Fichier JSON conforme à ce type (requis).
+   * - ``--author`` / ``--hypothesis``
+     - Optionnels.
+   * - ``--out``
+     - Fichier de sortie du brouillon (défaut : ``draft.json``).
+
+``--structure-type`` importe le module à la volée pour retrouver la classe enregistrée : le
+module doit donc être importable (présent dans le répertoire courant ou installé).
+
+``follow derive <ref>``
+--------------------------
+
+Dérive un brouillon depuis une expérience existante (``ref`` : id, branche ou tag) — hérite
+structure, objectifs, références et étapes du parent, ajoute automatiquement une référence
+``baseline``.
+
+.. list-table::
+   :header-rows: 1
+
+   * - Option
+     - Description
+   * - ``--title`` / ``--intent``
+     - Requis.
+   * - ``--new-branch``
+     - Créer/utiliser cette branche au lieu de continuer celle du parent.
+   * - ``--structure-type`` / ``--structure-file``
+     - Remplacent la structure héritée du parent (optionnels).
+   * - ``--author`` / ``--hypothesis`` / ``--out``
+     - Comme ``new``.
+
+``follow merge <ref_a> <ref_b>``
+-----------------------------------
+
+Fusionne deux lignes de travail (``ref_a`` : cible, ex. ``main`` ; ``ref_b`` : la ligne à
+fusionner dedans). Voir :doc:`merging` pour la sémantique complète.
+
+.. list-table::
+   :header-rows: 1
+
+   * - Option
+     - Description
+   * - ``--title`` / ``--intent``
+     - Requis.
+   * - ``--branch``
+     - Branche du commit de fusion (défaut : celle de ``ref_a``).
+   * - ``--take-structure PATH``
+     - Répétable — chemin de structure à prendre de ``ref_b``.
+   * - ``--take-steps PATH``
+     - Répétable — chemin d'étape à prendre de ``ref_b``.
+   * - ``--author`` / ``--hypothesis`` / ``--out``
+     - Comme ``new``.
+
+``follow commit <brouillon.json>``
+-------------------------------------
+
+Fige un brouillon (produit par ``new``/``derive``/``merge``, ou édité à la main) dans le dépôt.
+Calcule l'id par contenu, avance la branche, applique les tags.
+
+``follow log [ref]``
+-----------------------
+
+Historique premier-parent d'une branche/tag/expérience (défaut : ``main``). ``-n/--number``
+limite le nombre de lignes.
+
+``follow show <ref>``
+------------------------
+
+Affiche la fiche complète d'une expérience (façon ``git show``) : intention, structure (avec
+écarts vs référence le cas échéant), étapes, objectifs, preuves, conclusion.
+
+``follow diff <ref_a> <ref_b>``
+-----------------------------------
+
+Diff structurel entre deux expériences. ``--steps`` compare le protocole plutôt que la
+structure.
+
+``follow branch [nom]`` / ``follow tag [nom]``
+--------------------------------------------------
+
+Sans argument : liste les branches/tags. Avec un nom : crée ou déplace, ``--at REF`` requis.
+
+``follow graph``
+-------------------
+
+Exporte le graphe de filiation complet en HTML autonome (Plotly). ``--out`` (défaut
+``graph.html``), ``--open`` pour ouvrir dans le navigateur.
+
+``follow report [ref]``
+--------------------------
+
+Génère un compte rendu d'étude complet, sans IA, dérivé du dépôt — voir :doc:`report`.
+
+.. list-table::
+   :header-rows: 1
+
+   * - Option
+     - Description
+   * - ``ref`` (positionnel, optionnel)
+     - Limiter au lignage d'une branche/tag/expérience (défaut : tout le dépôt).
+   * - ``--title`` / ``--description``
+     - En-tête de la page.
+   * - ``--out``
+     - Fichier de sortie (défaut : ``report.html``).
+   * - ``--no-embed``
+     - Utiliser le CDN Plotly au lieu de l'inclure (fichier plus léger, nécessite une connexion).
+   * - ``--open``
+     - Ouvrir le fichier dans le navigateur.

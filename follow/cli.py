@@ -17,6 +17,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from . import __version__
 from .graphing import render_graph_html
 from .rendering import render_fiche, render_log
 from .report import render_study_html
@@ -274,6 +275,7 @@ def cmd_report(args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="follow", description="Suivi façon git pour les expériences scientifiques.")
+    parser.add_argument("--version", action="version", version=f"follow {__version__}")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     def add_repo_arg(p: argparse.ArgumentParser) -> None:

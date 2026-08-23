@@ -15,6 +15,76 @@ vérifier/tracer le raisonnement qui en découle (objectif → preuve → conclu
 point d'ancrage prévu pour une couche d'inférence causale/corrélative (ex. DoWhy) dans une
 itération future — non incluse dans ce périmètre v1 "cœur".
 
+Documentation complète (guide, référence de l'API, CLI) : voir `docs/` (`make html` avec Sphinx,
+détails plus bas) ou `demos/` pour des scénarios complets exécutables.
+
+## Installation
+
+```bash
+# depuis PyPI, une fois publié (pas encore le cas)
+pip install follow
+
+# depuis ce dépôt Git, dès maintenant
+pip install git+https://github.com/DmHoly/Follow.git
+
+# en local, pour développer (avec les tests et la doc)
+git clone https://github.com/DmHoly/Follow.git && cd Follow
+pip install -e ".[dev,docs]"
+```
+
+Python ≥ 3.11 requis. Deux dépendances : `pydantic` (les modèles) et `plotly` (le graphe de
+filiation) — pas de Graphviz, pas de base de données, pas de moteur de template.
+
+```python
+>>> import follow
+>>> follow.__version__
+'0.1.0'
+```
+
+## Démarrage rapide
+
+```python
+from follow import Quantity, Repository, Structure
+
+class CakeRecipe(Structure):
+    ingredients: dict[str, Quantity]
+
+repo = Repository()  # ou Repository("./mon_labo") pour persister sur disque
+
+baseline = (
+    repo.new(
+        branch="main",
+        structure=CakeRecipe(ingredients={"farine": Quantity(value=200, unit="g")}),
+        title="Référence",
+        intent="Établir une base de comparaison",
+    )
+    .conclude(status="concluded", decision="promote", summary="Recette de départ.")
+    .commit()
+)
+
+variant = repo.derive(baseline.id, title="Plus de farine", intent="Plus de farine améliore-t-elle la levée ?")
+variant.structure.ingredients["farine"] = Quantity(value=240, unit="g")
+variant.conclude(summary="Légère amélioration.", decision="promote")
+committed = variant.commit()
+
+for entry in repo.diff(baseline.id, committed.id):
+    print(entry)   # ~ ingredients.farine: 200 g -> 240 g
+```
+
+Équivalent en ligne de commande :
+
+```bash
+follow init mon_labo
+follow new --repo mon_labo --branch main --title Référence --intent "Établir une base" \
+  --structure-type mon_module.CakeRecipe --structure-file cake.json --out draft.json
+follow commit draft.json --repo mon_labo
+follow log main --repo mon_labo
+follow report --repo mon_labo --out etude.html   # la fiche complète, générée automatiquement
+```
+
+La suite de ce README détaille chaque concept ; `docs/quickstart.rst` reprend cet exemple pas à
+pas avec plus de contexte.
+
 ## Concepts
 
 | Concept | Rôle | Équivalent git |
@@ -219,3 +289,30 @@ branche est étiquetée.
 uv pip install -e ".[dev]"
 pytest
 ```
+
+## Documentation (Sphinx)
+
+Guide complet, référence de l'API (autodoc à partir des docstrings) et référence CLI dans
+`docs/` :
+
+```bash
+pip install -e ".[docs]"
+sphinx-build -b html docs docs/_build/html   # ou : cd docs && make html
+```
+
+Ouvrir `docs/_build/html/index.html`. Le contenu source (`docs/*.rst`) est versionné ; le rendu
+HTML (`docs/_build/`) ne l'est pas — il se régénère à la demande.
+
+## Publier une nouvelle version
+
+Le numéro de version vit à un seul endroit : `__version__` dans `follow/__init__.py`
+(`pyproject.toml` le lit dynamiquement via `[tool.hatch.version]`). Pour publier :
+
+```bash
+# 1. mettre à jour follow/__init__.py : __version__ = "x.y.z"
+python -m build            # construit dist/*.whl et dist/*.tar.gz (pip install build)
+python -m twine upload dist/*   # vers PyPI, si/quand le paquet y est publié
+```
+
+Ce dépôt n'est pas encore publié sur PyPI — `pip install git+https://github.com/DmHoly/Follow.git`
+reste la façon d'installer une version précise sans attendre une publication.
