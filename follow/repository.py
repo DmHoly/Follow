@@ -7,6 +7,7 @@ from typing import Any, Iterable, Iterator
 
 from .diffing import StructureDiff, diff_structures
 from .ids import content_id
+from .merging import resolve_merge_paths
 from .models import Conclusion, Evidence, Experiment, Objective, ReferenceLink, Step
 from .structure import Structure
 
@@ -202,8 +203,20 @@ class Repository:
         return {exp.id: list(exp.parents) for exp in self._objects.values()}
 
     def diff(self, ref_a: str, ref_b: str) -> StructureDiff:
+        """Structural diff between two experiments' ``Structure`` - the config being studied."""
         a, b = self.get(ref_a), self.get(ref_b)
         return diff_structures(self.load_structure(a), self.load_structure(b))
+
+    def diff_steps(self, ref_a: str, ref_b: str) -> StructureDiff:
+        """Diff between two experiments' protocol (``steps``), the same way :meth:`diff`
+        compares their structure - use it to find the ``[i]``/``[i].field`` paths to pass to
+        :meth:`merge`'s ``take_steps``.
+        """
+        a, b = self.get(ref_a), self.get(ref_b)
+        return diff_structures(
+            [s.model_dump(mode="json") for s in a.steps],
+            [s.model_dump(mode="json") for s in b.steps],
+        )
 
     # -- writing -------------------------------------------------------------------
 
@@ -253,13 +266,14 @@ class Repository:
         hypothesis: str | None = None,
         carry_objectives: bool = True,
         carry_references: bool = True,
+        carry_steps: bool = True,
     ) -> ExperimentBuilder:
         """Branch off an existing experiment: the equivalent of `git checkout -b <new_branch> <ref>`.
 
-        The parent's structure, objectives and references are carried over as a starting point
-        (override any of them before committing), and a "baseline" reference back to the parent
-        is added automatically unless one is already present - that's what makes every derived
-        experiment comparable to what it came from without extra bookkeeping.
+        The parent's structure, objectives, protocol steps and references are carried over as a
+        starting point (override any of them before committing), and a "baseline" reference back
+        to the parent is added automatically unless one is already present - that's what makes
+        every derived experiment comparable to what it came from without extra bookkeeping.
         """
         parent = self.get(ref)
         builder = ExperimentBuilder(
@@ -273,9 +287,63 @@ class Repository:
             hypothesis=hypothesis,
             objectives=parent.objectives if carry_objectives else (),
             references=parent.references if carry_references else (),
+            steps=parent.steps if carry_steps else (),
         )
         if not any(r.role == "baseline" for r in builder.references):
             builder.add_reference(role="baseline", experiment_id=parent.id, label=f"parent: {parent.title}")
+        return builder
+
+    def merge(
+        self,
+        ref_a: str,
+        ref_b: str,
+        *,
+        title: str,
+        intent: str,
+        take_structure: Iterable[str] = (),
+        take_steps: Iterable[str] = (),
+        branch: str | None = None,
+        author: str | None = None,
+        hypothesis: str | None = None,
+    ) -> ExperimentBuilder:
+        """Merge two lines of work into one experiment - the equivalent of `git merge`, with
+        manual conflict resolution: ``take_structure``/``take_steps`` list the paths (in the
+        format :meth:`diff`/:meth:`diff_steps` report) whose value should come from ``ref_b``
+        instead of ``ref_a``; every path you don't list keeps ``ref_a``'s value. The result gets
+        both tips as parents (so the graph records the merge like git does) plus a reference
+        back to each side (``baseline`` for ``ref_a``, ``merge_source`` for ``ref_b``).
+
+        Both experiments must share the same ``structure_type`` - Follow does not attempt to
+        reconcile two different domain schemas.
+        """
+        a, b = self.get(ref_a), self.get(ref_b)
+        structure_cls = Structure.resolve(a.structure_type)
+
+        merged_structure = resolve_merge_paths(
+            self.load_structure(a).model_dump(mode="json"),
+            self.load_structure(b).model_dump(mode="json"),
+            take_structure,
+        )
+        merged_steps = resolve_merge_paths(
+            [s.model_dump(mode="json") for s in a.steps],
+            [s.model_dump(mode="json") for s in b.steps],
+            take_steps,
+        )
+
+        builder = ExperimentBuilder(
+            self,
+            branch=branch or a.branch,
+            parents=[a.id, b.id],
+            structure=structure_cls.model_validate(merged_structure),
+            title=title,
+            intent=intent,
+            author=author,
+            hypothesis=hypothesis,
+            objectives=a.objectives,
+            steps=[Step.model_validate(s) for s in merged_steps],
+        )
+        builder.add_reference(role="baseline", experiment_id=a.id, label=f"{a.branch}: {a.title}")
+        builder.add_reference(role="merge_source", experiment_id=b.id, label=f"{b.branch}: {b.title}")
         return builder
 
     def load_draft(self, payload: dict[str, Any]) -> ExperimentBuilder:

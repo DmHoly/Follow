@@ -128,7 +128,8 @@ follow commit variant.json --repo mon_labo
 
 follow log main --repo mon_labo          # historique de la branche
 follow show exp_yyyyyyyy --repo mon_labo # la fiche complète (façon `git show`)
-follow diff exp_xxxxxxxx exp_yyyyyyyy --repo mon_labo  # uniquement ce qui a varié
+follow diff exp_xxxxxxxx exp_yyyyyyyy --repo mon_labo          # ce qui a varié dans la structure
+follow diff exp_xxxxxxxx exp_yyyyyyyy --repo mon_labo --steps  # ce qui a varié dans le protocole
 follow branch --repo mon_labo            # lister les branches
 follow branch essai --at exp_yyyyyyyy --repo mon_labo  # créer/déplacer une branche
 follow tag championne --at exp_yyyyyyyy --repo mon_labo
@@ -140,6 +141,36 @@ la volée pour retrouver la classe `Structure` enregistrée, donc vos domaines (
 et consorts) doivent être importables (présents dans le répertoire courant ou installés).
 
 `follow --help` / `follow <sous-commande> --help` détaille chaque option.
+
+## Fusionner deux lignes de travail (`follow merge`)
+
+Une expérience peut avoir **deux parents** — c'est un commit de fusion, comme dans git. Vous
+testez une variation sur une branche à part, puis vous rapatriez dans `main` uniquement ce qui a
+été validé : Follow ne résout jamais un conflit tout seul, vous choisissez explicitement, chemin
+par chemin, quelle valeur garder.
+
+```bash
+# `essai-cuisson` a divergé de `main` puis évolué sur 3 commits (160°C, 185°C, 175°C retenu)
+follow diff main essai-cuisson --repo mon_labo --steps
+# ~ [2].parameters.temperature: 170 C -> 175 C
+# ~ [2].parameters.duree: 35 min -> 32 min
+
+follow merge main essai-cuisson --repo mon_labo \
+  --title "Fusion : cuisson optimisée" \
+  --intent "N'adopter que la température de cuisson validée sur la branche d'essai" \
+  --take-steps "[2]" \
+  --out merge.json
+# merge.json : parents = [tip(main), tip(essai-cuisson)], step [2] vient de la branche,
+# toutes les autres étapes (y compris les changements propres à main) restent inchangées
+follow commit merge.json --repo mon_labo
+```
+
+`--take-structure PATH` fait la même chose pour la `Structure` (les chemins viennent de
+`follow diff`, sans `--steps`) ; `--take-steps PATH` cible le protocole (chemins de
+`follow diff --steps`, ex. `[2]` pour toute l'étape, `[2].parameters.temperature` pour un seul
+champ). Tout chemin non listé garde la valeur du premier réf (`ref_a`, la cible de la fusion) —
+exactement comme un hunk de `git merge` qu'on ne touche pas. Voir `Repository.merge` et
+`resolve_merge_paths` (`follow/merging.py`) côté Python.
 
 ## Graphe de filiation
 

@@ -43,7 +43,7 @@ class ReferenceLink(BaseModel):
     at a sibling branch, an old champion, or an external literature value.
     """
 
-    role: Literal["baseline", "control", "prior_art", "benchmark", "target_spec"]
+    role: Literal["baseline", "control", "prior_art", "benchmark", "target_spec", "merge_source"]
     label: str
     experiment_id: str | None = None
     external_source: str | None = None

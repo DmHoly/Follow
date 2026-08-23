@@ -71,16 +71,19 @@ def _walk(before: Any, after: Any, path: str, out: list[DiffEntry]) -> None:
         out.append(DiffEntry(path=path, kind="changed", before=before, after=after))
 
 
-def diff_structures(before: Structure | dict | None, after: Structure | dict | None) -> StructureDiff:
+def diff_structures(
+    before: Structure | dict | list | None, after: Structure | dict | list | None
+) -> StructureDiff:
     """Recursively compare two structures leaf by leaf, regardless of their domain.
 
-    Works on any :class:`Structure` subclass (or plain dict/None) without knowing anything
+    Works on any :class:`Structure` subclass, or a plain dict/list/None straight from
+    ``model_dump`` (e.g. a list of :class:`~follow.models.Step`), without knowing anything
     about recipes, MOSFETs or solar cells - it only walks the fields Pydantic already knows
     about. A :class:`~follow.quantity.Quantity` (a dict with a ``value`` key) is treated as a
     single leaf so e.g. a value/unit pair changes together rather than as two unrelated diffs.
     """
-    before_dump = before.model_dump(mode="json") if isinstance(before, BaseModel) else (before or {})
-    after_dump = after.model_dump(mode="json") if isinstance(after, BaseModel) else (after or {})
+    before_dump = before.model_dump(mode="json") if isinstance(before, BaseModel) else ({} if before is None else before)
+    after_dump = after.model_dump(mode="json") if isinstance(after, BaseModel) else ({} if after is None else after)
     entries: list[DiffEntry] = []
     _walk(before_dump, after_dump, "", entries)
     return StructureDiff(entries=entries)

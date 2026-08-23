@@ -167,14 +167,45 @@ def cmd_diff(args: argparse.Namespace) -> int:
         a, b = repo.get(args.ref_a), repo.get(args.ref_b)
     except ExperimentNotFoundError as exc:
         return _fail(str(exc))
-    _load_structure_class(a.structure_type)
-    _load_structure_class(b.structure_type)
-    diff = repo.diff(args.ref_a, args.ref_b)
+    if args.steps:
+        diff = repo.diff_steps(args.ref_a, args.ref_b)
+    else:
+        _load_structure_class(a.structure_type)
+        _load_structure_class(b.structure_type)
+        diff = repo.diff(args.ref_a, args.ref_b)
     if not diff:
         print("(aucune différence)")
         return 0
     for entry in diff:
         print(entry)
+    return 0
+
+
+def cmd_merge(args: argparse.Namespace) -> int:
+    repo = _repo(args.repo)
+    try:
+        a, b = repo.get(args.ref_a), repo.get(args.ref_b)
+    except ExperimentNotFoundError as exc:
+        return _fail(str(exc))
+    _load_structure_class(a.structure_type)
+    _load_structure_class(b.structure_type)
+    try:
+        builder = repo.merge(
+            a.id,
+            b.id,
+            title=args.title,
+            intent=args.intent,
+            take_structure=args.take_structure,
+            take_steps=args.take_steps,
+            branch=args.branch,
+            author=args.author,
+            hypothesis=args.hypothesis,
+        )
+    except (KeyError, IndexError, TypeError) as exc:
+        return _fail(f"chemin de fusion invalide: {exc}")
+    out = Path(args.out)
+    out.write_text(json.dumps(builder.to_draft(), indent=2, ensure_ascii=False))
+    print(f"Brouillon de fusion ({a.id} + {b.id}) écrit dans {out}. Éditez-le puis lancez `follow commit {out}`.")
     return 0
 
 
@@ -258,6 +289,34 @@ def build_parser() -> argparse.ArgumentParser:
     p_derive.add_argument("--out", default="draft.json")
     p_derive.set_defaults(func=cmd_derive)
 
+    p_merge = subparsers.add_parser("merge", help="fusionner deux lignes de travail (git merge)")
+    add_repo_arg(p_merge)
+    p_merge.add_argument("ref_a", help="cible de la fusion, ex. la branche principale")
+    p_merge.add_argument("ref_b", help="ligne à fusionner dedans, ex. la branche de test")
+    p_merge.add_argument("--title", required=True)
+    p_merge.add_argument("--intent", required=True)
+    p_merge.add_argument("--branch", help="branche du commit de fusion (défaut: celle de ref_a)")
+    p_merge.add_argument(
+        "--take-structure",
+        action="append",
+        default=[],
+        dest="take_structure",
+        metavar="PATH",
+        help="chemin de structure (voir `follow diff`) à prendre depuis ref_b plutôt que ref_a; répétable",
+    )
+    p_merge.add_argument(
+        "--take-steps",
+        action="append",
+        default=[],
+        dest="take_steps",
+        metavar="PATH",
+        help="chemin d'étape (voir `follow diff --steps`) à prendre depuis ref_b plutôt que ref_a; répétable",
+    )
+    p_merge.add_argument("--author")
+    p_merge.add_argument("--hypothesis")
+    p_merge.add_argument("--out", default="draft.json")
+    p_merge.set_defaults(func=cmd_merge)
+
     p_commit = subparsers.add_parser("commit", help="figer un brouillon dans le dépôt")
     add_repo_arg(p_commit)
     p_commit.add_argument("draft", help="fichier JSON produit par `new`/`derive` (ou édité à la main)")
@@ -274,10 +333,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_show.add_argument("ref")
     p_show.set_defaults(func=cmd_show)
 
-    p_diff = subparsers.add_parser("diff", help="diff structurel entre deux expériences")
+    p_diff = subparsers.add_parser("diff", help="diff structurel (ou de protocole) entre deux expériences")
     add_repo_arg(p_diff)
     p_diff.add_argument("ref_a")
     p_diff.add_argument("ref_b")
+    p_diff.add_argument("--steps", action="store_true", help="comparer les étapes du protocole plutôt que la structure")
     p_diff.set_defaults(func=cmd_diff)
 
     p_branch = subparsers.add_parser("branch", help="lister ou créer/déplacer une branche")

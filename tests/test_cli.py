@@ -124,3 +124,110 @@ def test_branch_without_at_fails_clearly(tmp_path, capsys):
     capsys.readouterr()
     assert main(["branch", "unknown-branch", "--repo", repo_path]) == 1
     assert "--at" in capsys.readouterr().err
+
+
+def test_merge_via_cli_selects_a_single_step_from_the_test_branch(tmp_path, capsys):
+    repo_path = str(tmp_path / "repo")
+    main(["init", repo_path])
+    capsys.readouterr()
+
+    struct_file = _write_json(tmp_path / "cake.json", CAKE_STRUCT)
+    draft = str(tmp_path / "v1.json")
+    main(
+        [
+            "new",
+            "--repo",
+            repo_path,
+            "--branch",
+            "main",
+            "--title",
+            "Baseline",
+            "--intent",
+            "start",
+            "--structure-type",
+            "examples.recipe.CakeRecipe",
+            "--structure-file",
+            struct_file,
+            "--out",
+            draft,
+        ]
+    )
+    capsys.readouterr()
+    payload = json.loads(Path(draft).read_text())
+    payload["steps"] = [
+        {"order": 1, "name": "Mix"},
+        {"order": 2, "name": "Rest"},
+        {"order": 3, "name": "Bake", "parameters": {"temperature": {"value": 170, "unit": "C"}}},
+        {"order": 4, "name": "Cool"},
+        {"order": 5, "name": "Ice"},
+    ]
+    Path(draft).write_text(json.dumps(payload))
+    assert main(["commit", draft, "--repo", repo_path]) == 0
+    v1_id = capsys.readouterr().out.split()[0]
+
+    branch_draft = str(tmp_path / "branch.json")
+    assert (
+        main(
+            [
+                "derive",
+                v1_id,
+                "--repo",
+                repo_path,
+                "--new-branch",
+                "essai-cuisson",
+                "--title",
+                "Essai 185C",
+                "--intent",
+                "Tester une cuisson plus vive",
+                "--out",
+                branch_draft,
+            ]
+        )
+        == 0
+    )
+    capsys.readouterr()
+    payload = json.loads(Path(branch_draft).read_text())
+    payload["steps"][2]["parameters"]["temperature"]["value"] = 185
+    payload["conclusion"] = {"status": "concluded", "decision": "promote", "summary": "Meilleure levée."}
+    Path(branch_draft).write_text(json.dumps(payload))
+    assert main(["commit", branch_draft, "--repo", repo_path]) == 0
+    branch_tip_id = capsys.readouterr().out.split()[0]
+
+    assert main(["diff", v1_id, branch_tip_id, "--repo", repo_path, "--steps"]) == 0
+    diff_out = capsys.readouterr().out
+    assert "[2].parameters.temperature" in diff_out
+
+    merge_draft = str(tmp_path / "merge.json")
+    assert (
+        main(
+            [
+                "merge",
+                "main",
+                branch_tip_id,
+                "--repo",
+                repo_path,
+                "--title",
+                "Fusion cuisson",
+                "--intent",
+                "Adopter uniquement la cuisson optimisée",
+                "--take-steps",
+                "[2]",
+                "--out",
+                merge_draft,
+            ]
+        )
+        == 0
+    )
+    capsys.readouterr()
+
+    assert main(["commit", merge_draft, "--repo", repo_path]) == 0
+    merge_id = capsys.readouterr().out.split()[0]
+
+    from follow import Repository
+
+    repo = Repository(repo_path)
+    merged = repo.get(merge_id)
+    assert set(merged.parents) == {v1_id, branch_tip_id}
+    assert merged.steps[2].parameters["temperature"].value == 185
+    assert merged.steps[0].name == "Mix"
+    assert repo.branches["main"] == merge_id
