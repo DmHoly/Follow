@@ -485,6 +485,18 @@ class Repository:
             unchanged = provisional.model_dump(mode="json", exclude={"id", "created_at"})
             if unchanged == current_tip.model_dump(mode="json", exclude={"id", "created_at"}):
                 return current_tip
+            # The branch has moved on since builder.parents was decided (someone else committed
+            # to it, or this builder derived from something other than the current tip - e.g.
+            # `derive(<an old commit>, ...)` without new_branch, git's detached-HEAD situation).
+            # Committing anyway would silently strand the current tip: still in the repository,
+            # but unreachable via log() once the branch pointer moves past it.
+            if current_tip_id not in builder.parents:
+                raise FollowError(
+                    f"branch {builder.branch!r} already points at {current_tip_id}, which is not "
+                    f"among this commit's parents {builder.parents!r} - committing would abandon "
+                    f"that history; derive from {current_tip_id!r} to continue this branch, or "
+                    "commit to a new/different branch name instead"
+                )
 
         payload = provisional.model_dump(mode="json", exclude={"id"})
         experiment = provisional.model_copy(update={"id": content_id("experiment", payload)})

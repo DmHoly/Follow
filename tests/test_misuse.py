@@ -191,3 +191,55 @@ def test_depends_on_referencing_a_real_step_is_fine():
     builder.add_step(name="B", depends_on=[1])
     committed = builder.commit()
     assert committed.steps[1].depends_on == [1]
+
+
+def test_deriving_into_an_existing_unrelated_branch_name_does_not_abandon_its_history():
+    repo = Repository()
+    a1 = repo.new(branch="feature", structure=_cake(), title="feature-v1", intent="x").commit()
+    a2 = repo.derive(a1.id, title="feature-v2", intent="x").commit()
+    b1 = repo.new(branch="other", structure=_cake(), title="other-v1", intent="x").commit()
+
+    with pytest.raises(FollowError, match="abandon"):
+        repo.derive(b1.id, new_branch="feature", title="oops", intent="x").commit()
+
+    # "feature" is untouched - still points at a2, its real history is intact
+    assert repo.branches["feature"] == a2.id
+    assert [e.id for e in repo.log("feature")] == [a2.id, a1.id]
+
+
+def test_deriving_from_a_non_tip_commit_without_a_new_branch_is_rejected():
+    # deriving from history rather than the branch's current tip, while staying "on" that same
+    # branch name, is git's detached-HEAD situation - it must not silently rewrite the branch.
+    repo = Repository()
+    a1 = repo.new(branch="main", structure=_cake(), title="v1", intent="x").commit()
+    a2 = repo.derive(a1.id, title="v2", intent="x").commit()
+    a3 = repo.derive(a2.id, title="v3", intent="x").commit()
+
+    with pytest.raises(FollowError, match="abandon"):
+        repo.derive(a1.id, title="v2-bis", intent="x").commit()
+
+    assert repo.branches["main"] == a3.id
+    assert [e.id for e in repo.log("main")] == [a3.id, a2.id, a1.id]
+
+    # the escape hatch: an explicit new_branch is always allowed, exactly like `git checkout -b`
+    fork = repo.derive(a1.id, new_branch="fork-from-v1", title="fork", intent="x").commit()
+    assert repo.branches["fork-from-v1"] == fork.id
+
+
+def test_merge_target_branch_moving_before_commit_is_rejected_not_silently_stale():
+    # if the target branch advances between building the merge and committing it (e.g. another
+    # commit landed in between), committing the stale merge must not silently strand the new tip.
+    repo = Repository()
+    a1 = repo.new(branch="main", structure=_cake(), title="v1", intent="x").commit()
+    branch = repo.derive(a1.id, new_branch="side", title="side", intent="x")
+    branch.structure.ingredients["flour"] = Quantity(value=999, unit="g")
+    side_tip = branch.commit()
+
+    merge_builder = repo.merge("main", side_tip.id, title="merge", intent="x")
+    # main advances past a1 before the merge above is actually committed
+    a2 = repo.derive(a1.id, title="v2", intent="x").commit()
+
+    with pytest.raises(FollowError, match="abandon"):
+        merge_builder.commit()
+
+    assert repo.branches["main"] == a2.id
