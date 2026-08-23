@@ -25,6 +25,17 @@ principal) et `follow.render_study_html` — qui utilisent le même thème visue
   sans aucune section écrite à la main : comparez `chocolate_fondant.html` et
   `chocolate_fondant_auto_report.html` dans `output/` pour voir la différence entre un rapport
   automatique et une démo narrée.
+- `wafer_doe.py` — un plan factoriel 5×5 (dose d'implantation × température de recuit) sur 25
+  wafers, modélisé comme une seule expérience Follow, suivi d'un lot de confirmation homogène :
+  l'affichage hybride (fiche + vue explosée par entité, `follow.batch.analyze_batch` +
+  `follow.report.batch_table`) et `follow.design.full_factorial` pour générer le split.
+- `chocolate_cake_optimization.py` — le guide complet en un seul dépôt exécutable : déclarer une
+  expérience (intention, structure, référence, objectifs), un split manuel (`sweep`), un split
+  raté puis corrigé (`check_identifiability`, `full_factorial`), un plan fractionnaire
+  (`fractional_factorial` + structure d'aliasing), un screening (`latin_hypercube`), une fusion
+  de deux améliorations validées séparément (`repo.merge`), un formulaire de commit obligatoire
+  (`follow.commit_form`), et une validation finale. Voir `docs/tutorial.rst` pour le même
+  scénario narré étape par étape.
 
 Régénérer une démo :
 

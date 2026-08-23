@@ -16,9 +16,11 @@ Installation
    git clone https://github.com/DmHoly/Follow.git && cd Follow
    pip install -e ".[dev,docs]"
 
-Python 3.11 ou plus est requis. Deux dépendances : `pydantic <https://docs.pydantic.dev/>`_
-(les modèles) et `plotly <https://plotly.com/python/>`_ (le graphe de filiation) — pas de
-Graphviz, pas de base de données, pas de moteur de template.
+Python 3.11 ou plus est requis. Quatre dépendances : `pydantic <https://docs.pydantic.dev/>`_
+(les modèles), `plotly <https://plotly.com/python/>`_ (le graphe de filiation), `numpy
+<https://numpy.org/>`_ (générateurs de plan d'expériences, :mod:`follow.design`) et `pyyaml
+<https://pyyaml.org/>`_ (formulaires de commit, :mod:`follow.commit_form`) — pas de Graphviz,
+pas de base de données, pas de moteur de template.
 
 .. code-block:: pycon
 
@@ -100,5 +102,7 @@ Enfin, on génère un compte rendu complet, sans rien écrire à la main :
    follow log main --repo mon_labo
    follow report --repo mon_labo --out etude.html
 
-Voir :doc:`cli` pour la référence complète des sous-commandes, et :doc:`concepts` pour le modèle
-de données en détail.
+Voir :doc:`cli` pour la référence complète des sous-commandes, :doc:`concepts` pour le modèle de
+données en détail, et :doc:`tutorial` pour un guide complet — déclarer une expérience, choisir
+une stratégie de split (manuel, factoriel, fractionnaire, screening), fusionner des améliorations
+validées séparément, exiger un formulaire de commit — sur une recette optimisée de bout en bout.

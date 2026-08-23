@@ -14,6 +14,11 @@ Des ``Structure`` prêtes à l'emploi, pour voir l'héritage et la composition e
   (composition profonde).
 - ``examples/chocolate_fondant.py`` — ``MoltenChocolateCake`` (composition + séparation
   structure/protocole, utilisée par ``demos/chocolate_fondant.py``).
+- ``examples/wafer_doe.py`` — ``Wafer`` / ``WaferLot`` (le cas d'école DOE : un lot d'entités
+  suivi comme une seule expérience, utilisée par ``demos/wafer_doe.py``).
+- ``examples/chocolate_cake.py`` — ``ChocolateCake`` / ``CakeTrialBatch`` (champs plats, pensés
+  pour :mod:`follow.design` ; utilisée par ``demos/chocolate_cake_optimization.py`` et
+  :doc:`tutorial`).
 
 Scénarios complets (``demos/``)
 ------------------------------------
@@ -29,12 +34,19 @@ HTML (voir ``demos/README.md`` dans le dépôt) :
   validation finale qui referme un écart de combinaison non testée.
 - ``demos/auto_report.py`` — le même dépôt que ``chocolate_fondant.py``, rendu par
   :func:`~follow.report.render_study_html` sans aucune section écrite à la main.
+- ``demos/wafer_doe.py`` — un split factoriel 5×5 sur 25 wafers modélisé comme une seule
+  expérience, avec l'affichage hybride fiche + vue explosée (:doc:`batch`).
+- ``demos/chocolate_cake_optimization.py`` — le guide complet (:doc:`tutorial`) en un seul
+  dépôt exécutable : split manuel, split raté puis corrigé, plan fractionnaire, screening Latin
+  Hypercube, fusion, formulaire de commit obligatoire, validation finale.
 
 .. code-block:: bash
 
-   python -m demos.fusion_selective          # écrit demos/output/fusion_selective.html
-   python -m demos.chocolate_fondant         # écrit demos/output/chocolate_fondant.html
-   python -m demos.auto_report               # écrit demos/output/chocolate_fondant_auto_report.html
+   python -m demos.fusion_selective              # écrit demos/output/fusion_selective.html
+   python -m demos.chocolate_fondant             # écrit demos/output/chocolate_fondant.html
+   python -m demos.auto_report                   # écrit demos/output/chocolate_fondant_auto_report.html
+   python -m demos.wafer_doe                     # écrit demos/output/wafer_doe.html
+   python -m demos.chocolate_cake_optimization   # écrit demos/output/chocolate_cake_optimization.html
 
 Les fichiers ``demos/output/*.html`` sont des instantanés statiques committés, consultables
 directement (double-clic, aucune installation requise).

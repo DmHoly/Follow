@@ -123,6 +123,33 @@ Les tags sont **immuables** : ``follow tag`` refuse de repointer un tag déjà e
 autre expérience, sauf avec ``--force`` (répéter le même ``--at`` est sans effet, pas besoin de
 ``--force``). Les branches restent mutables par nature, aucun flag nécessaire pour les déplacer.
 
+``follow explode <ref> <chemin>``
+-------------------------------------
+
+Éclate un champ liste de la structure d'une expérience (un lot DOE) en base constante + facteurs
+variables — voir :doc:`batch`.
+
+.. list-table::
+   :header-rows: 1
+
+   * - Option
+     - Description
+   * - ``ref`` (positionnel)
+     - Id, branche ou tag de l'expérience.
+   * - ``chemin`` (positionnel)
+     - Champ liste de la structure à éclater, ex. ``trials``.
+   * - ``--ignore FIELD``
+     - Répétable — champ d'identité à exclure de la comparaison (ex. un numéro d'essai).
+   * - ``--out``
+     - Écrire une page HTML au lieu d'afficher un résumé texte.
+   * - ``--open``
+     - Ouvrir le fichier HTML dans le navigateur (avec ``--out``).
+
+.. code-block:: bash
+
+   follow explode main trials --ignore trial_id --repo mon_labo
+   follow explode main trials --ignore trial_id --repo mon_labo --out explode.html --open
+
 ``follow graph``
 -------------------
 

@@ -62,6 +62,7 @@ Concepts
    :caption: Guide
 
    quickstart
+   tutorial
    concepts
    merging
    batch

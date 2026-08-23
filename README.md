@@ -84,7 +84,12 @@ follow report --repo mon_labo --out etude.html   # la fiche complète, généré
 ```
 
 La suite de ce README détaille chaque concept ; `docs/quickstart.rst` reprend cet exemple pas à
-pas avec plus de contexte.
+pas avec plus de contexte, et **`docs/tutorial.rst` est le guide complet** : déclarer une
+expérience (intention, structure, référence, objectifs), démarrer un split manuel puis plusieurs
+types de DOE (factoriel, fractionnaire, screening), détecter un plan mal construit avant de lui
+faire confiance, fusionner deux améliorations validées séparément, exiger un formulaire de
+commit, et valider avant de conclure — le tout sur une recette de gâteau au chocolat optimisée de
+bout en bout (`demos/chocolate_cake_optimization.py`).
 
 ## Concepts
 
@@ -131,7 +136,9 @@ class FinFETStructure(MOSFETStructure):
 Voir `examples/` pour les domaines complets : `recipe.py` (recette de gâteau, avec variante par
 héritage), `mosfet.py` (MOSFET → FinFET), `solar_cell.py` (composition profonde
 module → cellule → jonction PN → couche), `chocolate_fondant.py` (optimisation d'une recette de
-fondant au chocolat cœur coulant à partir de recettes réelles).
+fondant au chocolat cœur coulant à partir de recettes réelles), `wafer_doe.py` (le cas d'école
+DOE : un lot d'entités suivi comme une seule expérience), `chocolate_cake.py` (champs plats,
+pensés pour `follow.design` — voir `docs/tutorial.rst`).
 
 Voir `demos/` pour des scénarios complets, bout en bout, rendus en pages HTML autonomes.
 
@@ -177,7 +184,7 @@ print(repo.diff(baseline.id, committed.id))  # uniquement les paramètres qui on
 
 ## CLI façon git
 
-Après `uv pip install -e .`, la commande `follow` est disponible. Le principe suit celui de git :
+Après `pip install -e .`, la commande `follow` est disponible. Le principe suit celui de git :
 un brouillon JSON joue le rôle de l'arbre de travail (on l'édite à la main — ajout d'étapes, de
 preuves, écriture de la conclusion une fois l'expérience réellement menée), puis `follow commit`
 le fige dans le dépôt.
@@ -399,8 +406,9 @@ branche est étiquetée.
 ## Développer
 
 ```bash
-uv pip install -e ".[dev]"
+pip install -e ".[dev]"
 pytest
+pytest --cov=follow --cov-report=term-missing   # couverture
 ```
 
 ## Documentation (Sphinx)
