@@ -57,9 +57,12 @@ class FinFETStructure(MOSFETStructure):
     fin_width: Quantity
 ```
 
-Voir `examples/` pour trois domaines complets : `recipe.py` (recette de gâteau, avec variante
-par héritage), `mosfet.py` (MOSFET → FinFET), `solar_cell.py` (composition profonde
-module → cellule → jonction PN → couche).
+Voir `examples/` pour les domaines complets : `recipe.py` (recette de gâteau, avec variante par
+héritage), `mosfet.py` (MOSFET → FinFET), `solar_cell.py` (composition profonde
+module → cellule → jonction PN → couche), `chocolate_fondant.py` (optimisation d'une recette de
+fondant au chocolat cœur coulant à partir de recettes réelles).
+
+Voir `demos/` pour des scénarios complets, bout en bout, rendus en pages HTML autonomes.
 
 ## Workflow
 
