@@ -15,6 +15,11 @@ class Mold(Structure):
 
 
 class MoltenChocolateCake(Structure):
+    """The composition: what goes in the batter. Timing/temperature (resting, baking) is
+    protocol, not composition, so it lives on the experiment's ``steps`` instead - that split
+    is what lets a merge adopt an egg-yolk change independently of a baking-technique change.
+    """
+
     servings: int
     dark_chocolate: Quantity
     dark_chocolate_cacao_percent: Quantity
@@ -25,6 +30,3 @@ class MoltenChocolateCake(Structure):
     flour: Quantity
     salt: Quantity | None = None
     mold: Mold
-    bake_temperature: Quantity
-    bake_duration: Quantity
-    resting_note: str | None = None  # e.g. chilling the batter, freezing a ganache core

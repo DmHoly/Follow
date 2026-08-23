@@ -1,0 +1,429 @@
+<title>Fondant optimal</title>
+<meta name="description" content="Démo Follow : une recette de fondant au chocolat cœur coulant, synthétisée à partir de 10 recettes réelles puis optimisée par 3 branches d'expérience et 3 fusions successives, avec une validation finale qui referme un écart de combinaison non testée." />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Public+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #F2F4EE;
+  --surface: #FFFFFF;
+  --surface-2: #E9EBE1;
+  --ink: #1B231D;
+  --ink-soft: #57604F;
+  --ink-faint: #838C7C;
+  --border: #D9DCCE;
+  --accent: #B8791E;
+  --accent-ink: #7A5416;
+  --status-good: #2F7D4F;
+  --status-explore: #2E6FA6;
+  --status-bad: #B23B3B;
+  --status-neutral: #8A8F80;
+  --shadow: 0 1px 2px rgba(27,35,29,.04), 0 8px 24px -12px rgba(27,35,29,.12);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14181A; --surface: #1C2220; --surface-2: #262D29;
+    --ink: #ECEFE6; --ink-soft: #A9B2A0; --ink-faint: #74806E; --border: #333D35;
+    --accent: #E3A34E; --accent-ink: #EFC186;
+    --status-good: #57B583; --status-explore: #6FA9D6; --status-bad: #E27E7E; --status-neutral: #9AA398;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 28px -14px rgba(0,0,0,.55);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14181A; --surface: #1C2220; --surface-2: #262D29;
+  --ink: #ECEFE6; --ink-soft: #A9B2A0; --ink-faint: #74806E; --border: #333D35;
+  --accent: #E3A34E; --accent-ink: #EFC186;
+  --status-good: #57B583; --status-explore: #6FA9D6; --status-bad: #E27E7E; --status-neutral: #9AA398;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 28px -14px rgba(0,0,0,.55);
+}
+
+* { box-sizing: border-box; }
+html { color-scheme: light dark; }
+body { margin: 0; background: var(--bg); color: var(--ink);
+  font: 400 16px/1.5 "Public Sans", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+::selection { background: var(--accent); color: #fff; }
+a { color: var(--accent-ink); }
+code { font-family: "IBM Plex Mono", monospace; font-size: .92em; }
+
+.page { max-width: 1100px; margin: 0 auto; padding: 56px 24px 100px; display: flex; flex-direction: column; gap: 64px; }
+
+.header { display: flex; flex-direction: column; gap: 18px; }
+.eyebrow { font: 600 12px/1 "Public Sans", sans-serif; letter-spacing: .14em; text-transform: uppercase; color: var(--accent-ink); }
+h1 { font: 800 clamp(30px, 4.2vw, 46px)/1.08 "Archivo", sans-serif; text-wrap: balance; margin: 0; letter-spacing: -.01em; }
+.subtitle { font: 400 17px/1.6 "Public Sans", sans-serif; color: var(--ink-soft); max-width: 68ch; margin: 0; }
+.stat-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+.stat-chip { font: 500 13px/1 "IBM Plex Mono", monospace; padding: 9px 13px; border-radius: 8px;
+  background: var(--surface); border: 1px solid var(--border); color: var(--ink-soft); box-shadow: var(--shadow); }
+.stat-chip b { color: var(--ink); font-weight: 600; }
+
+.section { display: flex; flex-direction: column; gap: 22px; }
+.section-head { display: flex; flex-direction: column; gap: 8px; }
+.section-label { font: 600 11px/1 "Public Sans", sans-serif; letter-spacing: .12em; text-transform: uppercase; color: var(--accent-ink); }
+.section-title { font: 700 23px/1.25 "Archivo", sans-serif; margin: 0; text-wrap: balance; }
+.section-desc { font: 400 15px/1.65 "Public Sans", sans-serif; color: var(--ink-soft); max-width: 74ch; margin: 0; }
+
+.graph-frame { border: 1px solid var(--border); border-radius: 18px; background: var(--surface); padding: 20px; box-shadow: var(--shadow); }
+.graph-inner { border-radius: 12px; overflow: hidden; border: 1px solid var(--border); background: #fff; }
+.graph-inner .js-plotly-plot { width: 100% !important; }
+.graph-legend { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 16px; padding: 0 4px; font: 500 12px/1 "IBM Plex Mono", monospace; color: var(--ink-soft); }
+.legend-item { display: flex; align-items: center; gap: 7px; }
+.legend-dot { width: 9px; height: 9px; border-radius: 50%; background: currentColor; flex: none; }
+.legend-item.good { color: var(--status-good); }
+.legend-item.explore { color: var(--status-explore); }
+.legend-item.bad { color: var(--status-bad); }
+.legend-item.neutral { color: var(--status-neutral); }
+
+.trial-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; }
+.trial-card { background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--status-explore);
+  border-radius: 10px; padding: 18px 20px; display: flex; flex-direction: column; gap: 10px; box-shadow: var(--shadow); }
+.trial-card[data-verdict="promote"] { border-left-color: var(--status-good); }
+.trial-card[data-verdict="abandon"] { border-left-color: var(--status-bad); }
+.trial-order { font: 600 11px/1 "IBM Plex Mono", monospace; color: var(--ink-faint); letter-spacing: .06em; text-transform: uppercase; }
+.trial-temp { font: 700 28px/1 "Archivo", sans-serif; display: flex; align-items: baseline; gap: 8px; }
+.trial-temp span { font: 500 13px "IBM Plex Mono", monospace; color: var(--ink-soft); }
+.trial-meta { font: 400 13.5px/1.55 "Public Sans", sans-serif; color: var(--ink-soft); }
+.trial-metric { font: 500 12.5px "IBM Plex Mono", monospace; color: var(--ink); display: flex; justify-content: space-between;
+  border-top: 1px dashed var(--border); padding-top: 10px; }
+.verdict-label { display: flex; align-items: center; gap: 7px; font: 600 11.5px "Public Sans", sans-serif; text-transform: uppercase; letter-spacing: .05em; }
+.verdict-label.promote { color: var(--status-good); }
+.verdict-label.branch { color: var(--status-explore); }
+.verdict-label.abandon { color: var(--status-bad); }
+.verdict-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+
+.resolution-list { display: flex; flex-direction: column; gap: 10px; }
+.res-row { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.res-row.plain { display: flex; align-items: center; gap: 12px; padding: 12px 20px; color: var(--ink-faint); font: 400 13.5px "Public Sans", sans-serif; flex-wrap: wrap; }
+.res-row.plain .step-n { font: 600 12px "IBM Plex Mono", monospace; color: var(--ink-faint); }
+.res-row.plain .no-conflict { margin-left: auto; font: 500 11px "IBM Plex Mono", monospace; text-transform: uppercase; letter-spacing: .06em; color: var(--status-neutral); }
+.res-row.conflict { display: flex; flex-direction: column; gap: 14px; padding: 18px 20px 20px; box-shadow: var(--shadow); }
+.res-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.res-head .step-n { font: 700 12.5px "IBM Plex Mono", monospace; color: var(--accent-ink); }
+.res-head .step-name { font: 700 17px "Archivo", sans-serif; }
+.res-sides { display: grid; grid-template-columns: 1fr auto 1fr; gap: 16px; align-items: stretch; }
+.res-side { padding: 13px 15px; border-radius: 9px; background: var(--surface-2); border: 1.5px solid transparent; display: flex; flex-direction: column; gap: 5px; }
+.res-side .src { font: 600 11px "Public Sans", sans-serif; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-faint); display: flex; justify-content: space-between; align-items: center; }
+.res-side .val { font: 500 14px "IBM Plex Mono", monospace; color: var(--ink); }
+.res-side .note { font: 400 12.5px/1.5 "Public Sans", sans-serif; color: var(--ink-soft); }
+.res-side.winner { border-color: var(--status-good); background: var(--surface); }
+.res-side.winner .src { color: var(--status-good); }
+.res-check { font: 700 12px "IBM Plex Mono", monospace; }
+.res-arrow { font: 700 20px "Archivo", sans-serif; color: var(--ink-faint); display: flex; align-items: center; justify-content: center; padding-top: 18px; }
+.res-flag { align-self: flex-start; font: 500 12px "IBM Plex Mono", monospace; color: var(--accent-ink); background: var(--surface-2); padding: 5px 11px; border-radius: 6px; }
+
+.fiche-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 26px 28px;
+  display: flex; flex-direction: column; gap: 20px; box-shadow: var(--shadow); }
+.fiche-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+.fiche-title { font: 700 21px "Archivo", sans-serif; margin: 0 0 6px; }
+.fiche-id { font: 500 12.5px "IBM Plex Mono", monospace; color: var(--ink-faint); }
+.fiche-badges { display: flex; gap: 8px; flex-wrap: wrap; }
+.badge { font: 600 11px "Public Sans", sans-serif; text-transform: uppercase; letter-spacing: .05em; padding: 6px 11px;
+  border-radius: 999px; border: 1px solid var(--status-good); color: var(--status-good); }
+.badge.neutral { border-color: var(--status-neutral); color: var(--status-neutral); }
+.fiche-row { display: flex; flex-direction: column; gap: 6px; }
+.fiche-label { font: 600 11px "Public Sans", sans-serif; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-faint); }
+.fiche-text { font: 400 14.5px/1.6 "Public Sans", sans-serif; color: var(--ink); max-width: 74ch; }
+.parent-pills, .ref-pills { display: flex; gap: 10px; flex-wrap: wrap; }
+.parent-pill { display: flex; flex-direction: column; gap: 2px; padding: 9px 13px; border-radius: 9px; background: var(--surface-2); font: 500 12px "IBM Plex Mono", monospace; }
+.parent-pill .role { font: 600 10.5px "Public Sans", sans-serif; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-faint); }
+.parent-pill .lbl { color: var(--ink); }
+
+.source-table { width: 100%; border-collapse: collapse; font: 400 13.5px/1.5 "Public Sans", sans-serif; }
+.source-table th { text-align: left; font: 600 11px "Public Sans", sans-serif; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--ink-faint); padding: 0 14px 10px 0; border-bottom: 1px solid var(--border); }
+.source-table td { padding: 11px 14px 11px 0; border-bottom: 1px solid var(--border); vertical-align: top; color: var(--ink-soft); }
+.source-table td:first-child { color: var(--ink); font-weight: 500; }
+.source-table tr:last-child td { border-bottom: none; }
+.table-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow); padding: 4px 20px; }
+
+.repro { background: #1B2320; color: #D8E0D6; border-radius: 14px; padding: 22px 24px;
+  font: 400 13px/1.85 "IBM Plex Mono", monospace; overflow-x: auto; box-shadow: var(--shadow); }
+.repro .cmt { color: #7C8A79; }
+.repro .cmd::before { content: "$ "; color: #7C8A79; }
+.credit { font: 400 12.5px "Public Sans", sans-serif; color: var(--ink-faint); }
+
+@media (max-width: 640px) {
+  .res-sides { grid-template-columns: 1fr; }
+  .res-arrow { padding-top: 0; }
+  .fiche-top { flex-direction: column; }
+}
+</style>
+
+<div class="page">
+  <header class="header">
+    <div class="eyebrow">Follow · dépôt d'expériences</div>
+    <h1>Optimiser un fondant au chocolat cœur coulant à partir de 10 recettes réelles</h1>
+    <p class="subtitle">Une recette de référence synthétisée à partir des ratios moyens de 10 sources réelles (chocolat, beurre, sucre, farine, œufs), puis trois branches qui isolent chacune une variable disputée par ces sources — les jaunes d'œufs, le repos avant cuisson, la température de cuisson — fusionnées séquentiellement dans <code>main</code>, avant une dernière expérience qui valide la combinaison finale au lieu de la supposer.</p>
+    <div class="stat-row">
+      <span class="stat-chip"><b>10</b> recettes sources</span>
+      <span class="stat-chip"><b>11</b> commits</span>
+      <span class="stat-chip"><b>4</b> branches</span>
+      <span class="stat-chip"><b>3</b> fusions + <b>1</b> validation</span>
+    </div>
+  </header>
+
+  <section class="section">
+    <div class="section-head">
+      <div class="section-label">Sources</div>
+      <h2 class="section-title">10 recettes reelles, synthetisees</h2>
+      <p class="section-desc">
+        La recette de reference n'est pas inventee : elle vient de la moyenne des ratios
+        chiffres (beurre, sucre, farine) trouves sur les sources ci-dessous, et chaque branche
+        d'experience isole une technique ou une divergence explicitement relevee par au moins
+        une de ces sources.
+      </p>
+    </div>
+    <div class="table-scroll">
+      <table class="source-table">
+        <thead><tr><th>Source</th><th>Ce qu'elle donne</th><th>Utilisee pour</th></tr></thead>
+        <tbody>
+          <tr><td><a href="https://chefsimon.com/recettes/fondant-au-chocolat--22">Chef Simon</a></td><td>200g choc / 120g beurre / 4 oeufs / 60g farine. Cuit congelé, 200°C/15min.</td><td>Base du ratio beurre (~0,6x) et de la technique de congélation (essai-repos, validation finale).</td></tr>
+          <tr><td><a href="https://www.750g.com/fondant-chocolat-au-coeur-coulant-r201632.htm">750g.com</a></td><td>Quantités non confirmées. Moules silicone, 220°C/8min.</td><td>Un des points de la bande de cuisson « rapide et chaude » (essai-cuisson).</td></tr>
+          <tr><td><a href="https://www.atelierdeschefs.fr/recettes/23331/fondant-au-chocolat-coeur-coulant/">L'Atelier des Chefs</a></td><td>Quantités non confirmées. 200°C/8min.</td><td>Confirme la bande de cuisson « rapide et chaude ».</td></tr>
+          <tr><td><a href="https://www.lespepitesdecloe.com/fondant-chocolat-coeur-coulant/">Les Pépites de Cloé</a></td><td>100g choc / 60g beurre / 50g sucre / 2 oeufs / 20g farine. 180°C/10min.</td><td>Ratio sucre (~0,5x) et flour bas (~0,2-0,3x).</td></tr>
+          <tr><td><a href="https://www.ricardocuisine.com/en/recipes/2036-molten-chocolate-cake">Ricardo Cuisine</a></td><td>Oeufs + jaunes supplémentaires. Pâte réfrigérable (+3min de cuisson).</td><td>Justifie le principe des jaunes supplémentaires (essai-jaunes) et du repos au frigo.</td></tr>
+          <tr><td><a href="https://www.undejeunerdesoleil.com/2021/10/moelleux-chocolat-coeur-coulant.html">Un déjeuner de soleil</a></td><td>Pâte congelable jusqu'à 1 mois, cuite congelée (+3min).</td><td>Confirme la technique de congélation (essai-repos).</td></tr>
+          <tr><td><a href="https://www.ptitchef.com/recettes/dessert/moelleux-au-chocolat-avec-son-coeur-coulant-fid-1570262">Ptitchef</a></td><td>Coeur en ganache séparée, congelée puis insérée dans la pâte.</td><td>Signale, avec Chef Simon, que le froid est le levier le plus fiable pour un cœur liquide.</td></tr>
+          <tr><td><a href="https://www.tiktok.com/@lea.cooking/video/7288640090522258721">Cyril Lignac (repro. @lea.cooking)</a></td><td>90g choc / 90g beurre / 60g sucre / 2 oeufs + 2 jaunes / 45g farine. 170°C/9-10min.</td><td>Ratio beurre 1:1, technique des jaunes supplémentaires, bande de cuisson basse et longue.</td></tr>
+          <tr><td><a href="https://empreintesucree.fr/fondant-au-chocolat/">Empreinte Sucrée</a></td><td>150g choc / 80g beurre / 90g sucre / 4 oeufs. Repos = +30s à 1min de cuisson.</td><td>Confirme que le repos allonge peu la cuisson ; ratio sucre le plus haut observé.</td></tr>
+          <tr><td><a href="https://www.demotivateur.fr/food/recette/fondant-au-chocolat-coeur-coulant-2991">Demotivateur.fr</a></td><td>100g choc / 80g beurre demi-sel / 2 oeufs / 30g farine. 200°C/12min, calibré à la minute.</td><td>Rappelle qu'une minute de cuisson en trop suffit à figer le cœur.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head">
+      <div class="section-label">Graphe de filiation</div>
+      <h2 class="section-title">3 branches, 3 fusions, 1 validation</h2>
+      <p class="section-desc">
+        <code>essai-jaunes</code> ne touche que la structure (les jaunes d'oeufs) ;
+        <code>essai-repos</code> et <code>essai-cuisson</code> ne touchent que le protocole
+        (les etapes 5 et 6). Les trois fusions sur <code>main</code> sont sequentielles, et le
+        dernier commit re-teste explicitement une combinaison que les fusions n'avaient fait
+        que juxtaposer.
+      </p>
+    </div>
+    <div class="graph-frame">
+      <div class="graph-inner">
+        <div style="height:100%; width:100%;">                        <script>window.PlotlyConfig = {MathJaxConfig: 'local'};</script>
+        <script charset="utf-8" src="https://cdn.plot.ly/plotly-3.7.0.min.js" integrity="sha256-jvTGqxNp8AGWEcvNLVuKr+8j5dGe9Yw51LQkmDH+IYA=" crossorigin="anonymous"></script>                <div id="follow-graph" class="plotly-graph-div" style="height:100%; width:100%;"></div>            <script>                window.PLOTLYENV=window.PLOTLYENV || {};                                if (document.getElementById("follow-graph")) {                    Plotly.newPlot(                        "follow-graph",                        [{"hoverinfo":"none","line":{"color":"#b0b0b0","width":1.5},"mode":"lines","showlegend":false,"x":[0.0,-1.0,null,-1.0,-1.0,null,0.0,0.0,null,0.0,0.0,null,0.0,1.0,null,1.0,1.0,null,0.0,0.0,null,-1.0,0.0,null,0.0,0.0,null,0.0,0.0,null,0.0,0.0,null,1.0,0.0,null,0.0,0.0,null],"y":[0.0,1.0,null,1.0,2.0,null,0.0,1.0,null,1.0,2.0,null,0.0,1.0,null,1.0,2.0,null,0.0,3.0,null,2.0,3.0,null,3.0,4.0,null,2.0,4.0,null,4.0,5.0,null,2.0,5.0,null,5.0,6.0,null],"type":"scatter"},{"hoverinfo":"text","hovertext":["Recette de reference (synthese de 10 sources)\u003cbr\u003eid: exp_db39989791eafe8d\u003cbr\u003ebranche: main\u003cbr\u003estatut: concluded\u003cbr\u003eintention: Etablir une recette de reference a partir des ratios moyens observes sur 10 recettes reelles.","+2 jaunes\u003cbr\u003eid: exp_90764a0865af3f9b\u003cbr\u003ebranche: essai-jaunes\u003cbr\u003estatut: concluded\u003cbr\u003eintention: Des jaunes supplementaires rendent-ils le coeur plus onctueux et plus coulant ?","Repos 30min au frigo\u003cbr\u003eid: exp_ab95aed7f3a790e6\u003cbr\u003ebranche: essai-repos\u003cbr\u003estatut: concluded\u003cbr\u003eintention: Un court repos au refrigerateur ameliore-t-il la fiabilite du coeur coulant ?","Cuisson rapide et chaude (220C\u002f7min)\u003cbr\u003eid: exp_a73e649654151b99\u003cbr\u003ebranche: essai-cuisson\u003cbr\u003estatut: concluded\u003cbr\u003eintention: Une cuisson plus courte et plus vive, observee sur plusieurs sources, ameliore-t-elle le resultat ?","+4 jaunes (ratio Cyril Lignac)\u003cbr\u003eid: exp_12e4aa3e737d77d7\u003cbr\u003ebranche: essai-jaunes\u003cbr\u003estatut: concluded\u003cbr\u003eintention: Le ratio exact de Cyril Lignac (mis a l'echelle) donne-t-il un meilleur resultat que +2 jaunes ?","Congelation \u003e=12h (technique Chef Simon)\u003cbr\u003eid: exp_aca5f6a88f25ff28\u003cbr\u003ebranche: essai-repos\u003cbr\u003estatut: concluded\u003cbr\u003eintention: La congelation prolongee, citee par plusieurs sources comme le levier le plus fiable, confirme-t-elle cet avantage ?","Cuisson basse et lente (170C\u002f10min, ratio Cyril Lignac)\u003cbr\u003eid: exp_ddff585b89316913\u003cbr\u003ebranche: essai-cuisson\u003cbr\u003estatut: concluded\u003cbr\u003eintention: La bande de cuisson basse et longue, utilisee par Cyril Lignac, donne-t-elle un meilleur compromis bord\u002fcoeur ?","Fusion : jaunes supplementaires\u003cbr\u003eid: exp_81a9fc6f17b9da05\u003cbr\u003ebranche: main\u003cbr\u003estatut: concluded\u003cbr\u003eintention: Adopter le ratio de jaunes de Cyril Lignac (mis a l'echelle), sans toucher au reste.","Fusion : congelation et cuisson compensee\u003cbr\u003eid: exp_5888a4f0a1ac3218\u003cbr\u003ebranche: main\u003cbr\u003estatut: concluded\u003cbr\u003eintention: Adopter la technique de congelation validee, avec sa cuisson compensee (200C\u002f15min).","Fusion : cuisson basse temperature\u003cbr\u003eid: exp_bb6f797f21cc7d7e\u003cbr\u003ebranche: main\u003cbr\u003estatut: concluded\u003cbr\u003eintention: Adopter la cuisson a 170C\u002f10min validee sur pate fraiche.","Validation de la combinaison congelation + cuisson basse temperature\u003cbr\u003eid: exp_62d28d17f95f6a08\u003cbr\u003ebranche: main\u003cbr\u003estatut: concluded\u003cbr\u003eintention: La cuisson a 170C validee sur pate fraiche suffit-elle apres un depart congele, ou faut-il rallonger le temps ?"],"marker":{"color":["#2ca02c","#2ca02c","#2ca02c","#2ca02c","#2ca02c","#2ca02c","#2ca02c","#2ca02c","#2ca02c","#2ca02c","#2ca02c"],"line":{"color":"#333333","width":1},"size":20},"mode":"markers+text","showlegend":false,"text":["Recette de reference (synthese de 10 sources)","+2 jaunes","Repos 30min au frigo","Cuisson rapide et chaude (220C\u002f7min)","+4 jaunes (ratio Cyril Lignac)","Congelation \u003e=12h (technique Chef Simon)","Cuisson basse et lente (170C\u002f10min, ratio Cyril Lignac)","Fusion : jaunes supplementaires","Fusion : congelation et cuisson compensee","Fusion : cuisson basse temperature","Validation de la combinaison congelation + cuisson basse temperature"],"textposition":"top center","x":[0.0,-1.0,0.0,1.0,-1.0,0.0,1.0,0.0,0.0,0.0,0.0],"y":[0.0,1.0,1.0,1.0,2.0,2.0,2.0,3.0,4.0,5.0,6.0],"type":"scatter"},{"hoverinfo":"none","mode":"text","showlegend":false,"text":["\u2325 main","\u2325 essai-jaunes","\u2325 essai-repos","\u2325 essai-cuisson"],"textfont":{"color":"#8a6d00","size":11},"x":[0.0,-1.0,0.0,1.0],"y":[5.7,1.7,1.7,1.7],"type":"scatter"}],                        {"template":{"data":{"histogram2dcontour":[{"type":"histogram2dcontour","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"choropleth":[{"type":"choropleth","colorbar":{"outlinewidth":0,"ticks":""}}],"histogram2d":[{"type":"histogram2d","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"heatmap":[{"type":"heatmap","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"contourcarpet":[{"type":"contourcarpet","colorbar":{"outlinewidth":0,"ticks":""}}],"contour":[{"type":"contour","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"surface":[{"type":"surface","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"mesh3d":[{"type":"mesh3d","colorbar":{"outlinewidth":0,"ticks":""}}],"scatter":[{"fillpattern":{"fillmode":"overlay","size":10,"solidity":0.2},"type":"scatter"}],"parcoords":[{"type":"parcoords","line":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatterpolargl":[{"type":"scatterpolargl","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"bar":[{"error_x":{"color":"#2a3f5f"},"error_y":{"color":"#2a3f5f"},"marker":{"line":{"color":"#E5ECF6","width":0.5},"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"bar"}],"scattergeo":[{"type":"scattergeo","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatterpolar":[{"type":"scatterpolar","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"histogram":[{"marker":{"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"histogram"}],"scattergl":[{"type":"scattergl","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatter3d":[{"type":"scatter3d","line":{"colorbar":{"outlinewidth":0,"ticks":""}},"marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scattermap":[{"type":"scattermap","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scattermapbox":[{"type":"scattermapbox","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatterternary":[{"type":"scatterternary","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scattercarpet":[{"type":"scattercarpet","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"carpet":[{"aaxis":{"endlinecolor":"#2a3f5f","gridcolor":"white","linecolor":"white","minorgridcolor":"white","startlinecolor":"#2a3f5f"},"baxis":{"endlinecolor":"#2a3f5f","gridcolor":"white","linecolor":"white","minorgridcolor":"white","startlinecolor":"#2a3f5f"},"type":"carpet"}],"table":[{"cells":{"fill":{"color":"#EBF0F8"},"line":{"color":"white"}},"header":{"fill":{"color":"#C8D4E3"},"line":{"color":"white"}},"type":"table"}],"barpolar":[{"marker":{"line":{"color":"#E5ECF6","width":0.5},"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"barpolar"}],"pie":[{"automargin":true,"type":"pie"}]},"layout":{"autotypenumbers":"strict","colorway":["#636efa","#EF553B","#00cc96","#ab63fa","#FFA15A","#19d3f3","#FF6692","#B6E880","#FF97FF","#FECB52"],"font":{"color":"#2a3f5f"},"hovermode":"closest","hoverlabel":{"align":"left"},"paper_bgcolor":"white","plot_bgcolor":"#E5ECF6","polar":{"bgcolor":"#E5ECF6","angularaxis":{"gridcolor":"white","linecolor":"white","ticks":""},"radialaxis":{"gridcolor":"white","linecolor":"white","ticks":""}},"ternary":{"bgcolor":"#E5ECF6","aaxis":{"gridcolor":"white","linecolor":"white","ticks":""},"baxis":{"gridcolor":"white","linecolor":"white","ticks":""},"caxis":{"gridcolor":"white","linecolor":"white","ticks":""}},"coloraxis":{"colorbar":{"outlinewidth":0,"ticks":""}},"colorscale":{"sequential":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"sequentialminus":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"diverging":[[0,"#8e0152"],[0.1,"#c51b7d"],[0.2,"#de77ae"],[0.3,"#f1b6da"],[0.4,"#fde0ef"],[0.5,"#f7f7f7"],[0.6,"#e6f5d0"],[0.7,"#b8e186"],[0.8,"#7fbc41"],[0.9,"#4d9221"],[1,"#276419"]]},"xaxis":{"gridcolor":"white","linecolor":"white","ticks":"","title":{"standoff":15},"zerolinecolor":"white","automargin":true,"zerolinewidth":2},"yaxis":{"gridcolor":"white","linecolor":"white","ticks":"","title":{"standoff":15},"zerolinecolor":"white","automargin":true,"zerolinewidth":2},"scene":{"xaxis":{"backgroundcolor":"#E5ECF6","gridcolor":"white","linecolor":"white","showbackground":true,"ticks":"","zerolinecolor":"white","gridwidth":2},"yaxis":{"backgroundcolor":"#E5ECF6","gridcolor":"white","linecolor":"white","showbackground":true,"ticks":"","zerolinecolor":"white","gridwidth":2},"zaxis":{"backgroundcolor":"#E5ECF6","gridcolor":"white","linecolor":"white","showbackground":true,"ticks":"","zerolinecolor":"white","gridwidth":2}},"shapedefaults":{"line":{"color":"#2a3f5f"}},"annotationdefaults":{"arrowcolor":"#2a3f5f","arrowhead":0,"arrowwidth":1},"geo":{"bgcolor":"white","landcolor":"#E5ECF6","subunitcolor":"white","showland":true,"showlakes":true,"lakecolor":"white"},"title":{"x":0.05},"mapbox":{"style":"light"}}},"xaxis":{"visible":false},"yaxis":{"visible":false,"autorange":"reversed"},"margin":{"l":20,"r":20,"t":50,"b":20},"title":{"text":"Follow \u2014 graphe de filiation"},"plot_bgcolor":"white"},                        {"displaylogo": false, "responsive": true, "modeBarButtonsToRemove": ["toImage"]}                    )                };            </script>        </div>
+      </div>
+      <div class="graph-legend">
+        <span class="legend-item good"><span class="legend-dot"></span>concluded &middot; promote</span>
+        <span class="legend-item explore"><span class="legend-dot"></span>concluded &middot; branch (exploration)</span>
+        <span class="legend-item bad"><span class="legend-dot"></span>abandoned</span>
+        <span class="legend-item neutral"><span class="legend-dot"></span>draft / running / inconclusive</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head">
+      <div class="section-label">Branche essai-jaunes</div>
+      <h2 class="section-title">Des jaunes d'oeufs supplementaires, sans toucher au protocole</h2>
+      <p class="section-desc">Structure uniquement : <code>egg_yolks</code> passe de 0 a 2 puis 4 (le ratio exact de Cyril Lignac, mis à l'échelle sur notre quantité de chocolat).</p>
+    </div>
+    <div class="trial-grid">
+      <div class="trial-card" data-verdict="branch">
+        <div class="trial-order">Essai 1 · exp_90764a08</div>
+        <div class="trial-temp">+2 <span>jaunes</span></div>
+        <div class="trial-meta">Amelioration moderee, pas encore au niveau vise.</div>
+        <div class="trial-metric"><span>temperature_coeur_c</span><span>44 C</span></div>
+        <div class="verdict-label branch"><span class="verdict-dot"></span>Insuffisant — on continue</div>
+      </div>
+      <div class="trial-card" data-verdict="promote">
+        <div class="trial-order">Essai 2 · exp_12e4aa3e</div>
+        <div class="trial-temp">+4 <span>jaunes</span></div>
+        <div class="trial-meta">Texture la plus onctueuse, le coeur coule immediatement a la decoupe - conforme a la technique de Cyril Lignac mise a l'echelle.</div>
+        <div class="trial-metric"><span>temperature_coeur_c</span><span>49 C</span></div>
+        <div class="verdict-label promote"><span class="verdict-dot"></span>Retenu pour la fusion</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head">
+      <div class="section-label">Branche essai-repos</div>
+      <h2 class="section-title">Repos et congelation avant cuisson</h2>
+      <p class="section-desc">Protocole uniquement : l'etape « Laisser reposer » (et sa cuisson compensee) sont modifiees, la composition ne change pas.</p>
+    </div>
+    <div class="trial-grid">
+      <div class="trial-card" data-verdict="branch">
+        <div class="trial-order">Essai 1 · exp_ab95aed7</div>
+        <div class="trial-temp">Frigo 30min <span></span></div>
+        <div class="trial-meta">Legere amelioration, plus fiable mais pas spectaculaire.</div>
+        <div class="trial-metric"><span>temperature_coeur_c</span><span>42 C</span></div>
+        <div class="verdict-label branch"><span class="verdict-dot"></span>Insuffisant — on continue</div>
+      </div>
+      <div class="trial-card" data-verdict="promote">
+        <div class="trial-order">Essai 2 · exp_aca5f6a8</div>
+        <div class="trial-temp">Congel. ≥12h <span></span></div>
+        <div class="trial-meta">Technique la plus fiable pour un coeur franchement liquide - conforme a la recette de Chef Simon (200C/15min congele).</div>
+        <div class="trial-metric"><span>temperature_coeur_c</span><span>52 C</span></div>
+        <div class="verdict-label promote"><span class="verdict-dot"></span>Retenu pour la fusion</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head">
+      <div class="section-label">Branche essai-cuisson</div>
+      <h2 class="section-title">Deux bandes de cuisson observees dans les sources</h2>
+      <p class="section-desc">Protocole uniquement : seule l'etape « Cuire au four » varie (temperature et duree).</p>
+    </div>
+    <div class="trial-grid">
+      <div class="trial-card" data-verdict="branch">
+        <div class="trial-order">Essai 1 · exp_a73e6496</div>
+        <div class="trial-temp">220°C <span>/ 7 min</span></div>
+        <div class="trial-meta">Cuisson rapide, bords parfois secs, coeur correct mais pas optimal.</div>
+        <div class="trial-metric"><span>temperature_coeur_c</span><span>40 C</span></div>
+        <div class="verdict-label branch"><span class="verdict-dot"></span>Insuffisant — on continue</div>
+      </div>
+      <div class="trial-card" data-verdict="promote">
+        <div class="trial-order">Essai 2 · exp_ddff585b</div>
+        <div class="trial-temp">170°C <span>/ 10 min</span></div>
+        <div class="trial-meta">Cuisson homogene, meilleur compromis bord cuit / coeur liquide - conforme a la recette de Cyril Lignac.</div>
+        <div class="trial-metric"><span>temperature_coeur_c</span><span>50 C</span></div>
+        <div class="verdict-label promote"><span class="verdict-dot"></span>Retenu pour la fusion</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head">
+      <div class="section-label">Resolution des fusions</div>
+      <h2 class="section-title">Chaque fusion ne rapatrie qu'une variable</h2>
+      <p class="section-desc">
+        Trois fusions successives sur <code>main</code>. La troisieme est volontairement
+        conclue « inconclusive » : elle juxtapose deux techniques validees separement, jamais
+        ensemble.
+      </p>
+    </div>
+    <div class="resolution-list">
+      <div class="res-row conflict">
+        <div class="res-head">
+          <span class="step-n">[0]</span>
+          <span class="step-name">Fusion 1 — essai-jaunes -> main</span>
+        </div>
+        <div class="res-sides">
+          <div class="res-side">
+            <div class="src">main</div>
+            <div class="val">egg_yolks = 0</div>
+            <div class="note">Valeur de reference, exp_db399897</div>
+          </div>
+          <div class="res-arrow">&rarr;</div>
+          <div class="res-side winner">
+            <div class="src">essai-jaunes <span class="res-check">✓ retenu</span></div>
+            <div class="val">egg_yolks = 4</div>
+            <div class="note">Valide sur 2 commits, exp_12e4aa3e</div>
+          </div>
+        </div>
+        <div class="res-flag">--take-structure "egg_yolks" &rarr; seule la structure change</div>
+      </div>
+      <div class="res-row conflict">
+        <div class="res-head">
+          <span class="step-n">[1]</span>
+          <span class="step-name">Fusion 2 — essai-repos -> main</span>
+        </div>
+        <div class="res-sides">
+          <div class="res-side">
+            <div class="src">main</div>
+            <div class="val">[4] aucun repos &middot; [5] 200°C/10min</div>
+            <div class="note">Valeur de reference, exp_db399897</div>
+          </div>
+          <div class="res-arrow">&rarr;</div>
+          <div class="res-side winner">
+            <div class="src">essai-repos <span class="res-check">✓ retenu</span></div>
+            <div class="val">[4] congel. ≥12h &middot; [5] 200°C/15min</div>
+            <div class="note">Paire validee ensemble, exp_aca5f6a8</div>
+          </div>
+        </div>
+        <div class="res-flag">--take-steps "[4]" "[5]" &rarr; les deux etapes couplees sont reprises ensemble</div>
+      </div>
+      <div class="res-row conflict">
+        <div class="res-head">
+          <span class="step-n">[2]</span>
+          <span class="step-name">Fusion 3 — essai-cuisson -> main</span>
+        </div>
+        <div class="res-sides">
+          <div class="res-side">
+            <div class="src">main (deja fusionne)</div>
+            <div class="val">[5] 200°C/15min</div>
+            <div class="note">Valide pour une pate CONGELEE (fusion 2)</div>
+          </div>
+          <div class="res-arrow">&rarr;</div>
+          <div class="res-side winner">
+            <div class="src">essai-cuisson <span class="res-check">✓ retenu</span></div>
+            <div class="val">[5] 170°C/10min</div>
+            <div class="note">Valide pour une pate FRAICHE (jamais congelee)</div>
+          </div>
+        </div>
+        <div class="res-flag">--take-steps "[5]" &rarr; combinaison non testee, signalee par decision="inconclusive"</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head">
+      <div class="section-label">Validation finale</div>
+      <h2 class="section-title">Refermer l'ecart signale par la fusion 3</h2>
+      <p class="section-desc">
+        Plutot que de publier une recette dont la combinaison n'a jamais ete testee, un dernier
+        commit ajuste la duree de cuisson pour compenser le depart congele et re-teste
+        explicitement l'ensemble.
+      </p>
+    </div>
+    <div class="fiche-card">
+      <div class="fiche-top">
+        <div>
+          <div class="fiche-title">Validation de la combinaison congelation + cuisson basse temperature</div>
+          <div class="fiche-id">exp_62d28d17f95f6a08 · branche main</div>
+        </div>
+        <div class="fiche-badges">
+          <span class="badge">concluded</span>
+          <span class="badge">promote</span>
+          <span class="badge">tag: recette-optimale</span>
+        </div>
+      </div>
+
+      <div class="fiche-row">
+        <div class="fiche-label">Intention</div>
+        <p class="fiche-text">La cuisson a 170C validee sur pate fraiche suffit-elle apres un depart congele, ou faut-il rallonger le temps ?</p>
+      </div>
+
+      <div class="fiche-row">
+        <div class="fiche-label">Parents (commit de fusion — deux ascendances)</div>
+        <div class="parent-pills">
+          <div class="parent-pill"><span class="role">parent · main</span><span class="lbl">exp_bb6f797f — Fusion : cuisson basse temperature</span></div>
+        </div>
+      </div>
+
+      <div class="fiche-row">
+        <div class="fiche-label">Conclusion</div>
+        <p class="fiche-text">Combinaison validee : congelation >=12h + cuisson 170C/14min. Recette optimale retenue.</p>
+      </div>
+    </div>
+  </section>
+
+<footer class="footer section">
+    <div class="section-head">
+      <div class="section-label">Reproduire</div>
+      <h2 class="section-title">La recette optimale, en resume</h2>
+    </div>
+    <div class="repro">
+      <div class="cmt"># structure finale (main, tag recette-optimale)</div>
+      <div>180g chocolat noir 64% &middot; 125g beurre &middot; 90g sucre</div>
+      <div>4 oeufs entiers + 4 jaunes &middot; 50g farine &middot; 1 pincee de sel</div>
+      <div>4 ramequins beurres et farines</div>
+      <br />
+      <div class="cmt"># protocole final (etapes 5 et 6)</div>
+      <div>Congeler les moules remplis au moins 12h ; cuire directement congele</div>
+      <div>170°C, 14 min</div>
+      <br />
+      <div class="cmt"># reproduire ce scenario</div>
+      <div class="cmd">python -m demos.chocolate_fondant</div>
+    </div>
+    <p class="credit">Genere avec <code>python -m demos.chocolate_fondant</code> — toutes les valeurs de la synthese viennent des 10 sources ci-dessus ; les mesures de temperature au coeur (sonde) sont illustratives, cette demo ne pretend pas avoir cuisine les 11 versions.</p>
+  </footer>
+</div>
