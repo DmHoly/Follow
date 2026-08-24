@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Iterator
@@ -18,14 +19,65 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _write_atomic(path: Path, text: str) -> None:
+    """Write ``text`` to ``path`` so a reader only ever sees the old file or the new one.
+
+    A plain ``write_text`` truncates the file and then fills it: interrupt it - Ctrl-C, a full
+    disk, a crash - and what is left on disk is a *half* file. For ``refs.json`` that is not an
+    inconvenience but a repository whose branches no longer name real objects, i.e. exactly the
+    state :class:`DanglingRefError` now reports. Writing to a temporary file in the same
+    directory and then ``os.replace``-ing it over the target makes the swap atomic on POSIX and
+    on Windows, so the old file stands until the new one is complete.
+
+    Note what this does *not* solve: two processes committing to the same repository at once
+    still overwrite each other's refs, because each holds a whole in-memory view read before the
+    other's write. Atomicity keeps every individual file readable; it is not a lock.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    try:
+        with open(tmp, "w", encoding="utf-8") as handle:
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())  # the bytes must be on disk before the name points at them
+        os.replace(tmp, path)
+    except BaseException:
+        tmp.unlink(missing_ok=True)  # never leave a stray .tmp behind, not even on Ctrl-C
+        raise
+
+
 class FollowError(Exception):
     """Base class for Follow errors."""
 
 
 class ExperimentNotFoundError(FollowError, KeyError):
-    def __init__(self, ref: str):
-        super().__init__(f"No experiment, branch or tag matches {ref!r}")
+    def __init__(self, ref: str, message: str | None = None):
+        super().__init__(message or f"No experiment, branch or tag matches {ref!r}")
         self.ref = ref
+
+
+class DanglingRefError(ExperimentNotFoundError):
+    """Raised when a branch, tag or parent link points at an experiment the repository does not
+    have - a ``refs.json`` that has drifted out of step with ``objects/`` (a half-finished copy,
+    a deleted object file, an interrupted write).
+
+    It is a kind of :class:`ExperimentNotFoundError` on purpose: callers already guarding for
+    "this ref doesn't resolve" keep working, and ``ref in repo`` still answers False for it,
+    matching what :meth:`Repository.get` will actually do. What it adds is a message that says
+    the repository is inconsistent rather than that the name is unknown - the two call for very
+    different fixes.
+    """
+
+    def __init__(self, kind: str, name: str, target_id: str):
+        super().__init__(
+            name,
+            f"{kind} {name!r} points at {target_id}, which is not in this repository - its "
+            "refs are out of step with its stored objects; point it somewhere real with "
+            "repo.branch(..., force=True) / repo.tag(..., force=True), or restore the missing "
+            "object file",
+        )
+        self.kind = kind
+        self.target_id = target_id
 
 
 class NothingToCommitError(FollowError):
@@ -239,13 +291,29 @@ class Repository:
         return True
 
     def _resolve_ref(self, ref: str) -> str:
-        if ref in self._branches:
-            return self._branches[ref]
-        if ref in self._tags:
-            return self._tags[ref]
+        """Resolve a branch name, tag name or experiment id to an id that is actually stored.
+
+        A ref is only resolved once its target has been confirmed present: returning the id a
+        stale ``refs.json`` names, without checking, left ``get()`` to fail on a bare
+        ``KeyError`` carrying nothing but a hash - and made ``ref in repo`` answer True for a
+        ref that ``get()`` could not honour.
+        """
+        for kind, table in (("branch", self._branches), ("tag", self._tags)):
+            if ref in table:
+                target = table[ref]
+                if target not in self._objects:
+                    raise DanglingRefError(kind, ref, target)
+                return target
         if ref in self._objects:
             return ref
         raise ExperimentNotFoundError(ref)
+
+    def _stored(self, experiment_id: str, *, reached_from: str) -> Experiment:
+        """One stored experiment by id, or a clear error naming what pointed at it."""
+        try:
+            return self._objects[experiment_id]
+        except KeyError:
+            raise DanglingRefError("parent of", reached_from, experiment_id) from None
 
     def _ensure_branch_name_available(self, name: str) -> None:
         """Branches and tags share one namespace: resolving a ref checks branches first, so a
@@ -279,10 +347,12 @@ class Repository:
         history: list[Experiment] = []
         current: str | None = self._resolve_ref(ref)
         seen: set[str] = set()
+        previous = ref
         while current and current not in seen:
             seen.add(current)
-            exp = self._objects[current]
+            exp = self._stored(current, reached_from=previous)
             history.append(exp)
+            previous = exp.id
             current = exp.parents[0] if exp.parents else None
         return history
 
@@ -609,7 +679,7 @@ class Repository:
         )
         current_tip_id = self._branches.get(builder.branch)
         if current_tip_id is not None:
-            current_tip = self._objects[current_tip_id]
+            current_tip = self._stored(current_tip_id, reached_from=builder.branch)
             # Ignoring id/created_at, is this commit identical to the branch's current tip? Then
             # there is nothing to commit - exactly like `git commit` with no staged changes,
             # this is refused rather than silently creating a content-duplicate commit (which
@@ -652,21 +722,21 @@ class Repository:
     def _persist_experiment(self, experiment: Experiment) -> None:
         objects_dir = self.path / "objects"
         objects_dir.mkdir(parents=True, exist_ok=True)
-        (objects_dir / f"{experiment.id}.json").write_text(experiment.model_dump_json(indent=2))
+        _write_atomic(objects_dir / f"{experiment.id}.json", experiment.model_dump_json(indent=2))
 
     def _persist_refs(self) -> None:
         self.path.mkdir(parents=True, exist_ok=True)
         refs = {"branches": self._branches, "tags": self._tags}
-        (self.path / "refs.json").write_text(json.dumps(refs, indent=2, sort_keys=True))
+        _write_atomic(self.path / "refs.json", json.dumps(refs, indent=2, sort_keys=True))
 
     def _load(self) -> None:
         objects_dir = self.path / "objects"
         if objects_dir.exists():
             for file in objects_dir.glob("*.json"):
-                exp = Experiment.model_validate_json(file.read_text())
+                exp = Experiment.model_validate_json(file.read_text(encoding="utf-8"))
                 self._objects[exp.id] = exp
         refs_file = self.path / "refs.json"
         if refs_file.exists():
-            refs = json.loads(refs_file.read_text())
+            refs = json.loads(refs_file.read_text(encoding="utf-8"))
             self._branches = dict(refs.get("branches", {}))
             self._tags = dict(refs.get("tags", {}))

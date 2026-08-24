@@ -4,12 +4,22 @@ state or crashing with a confusing low-level error. Every one of these was repro
 silent problem before the corresponding fix.
 """
 
+import json
+
 import pytest
 from pydantic import ValidationError
 
 from examples.mosfet import Layer, MOSFETStructure
 from examples.recipe import BakeStep, CakeRecipe
-from follow import ExperimentNotFoundError, FollowError, NothingToCommitError, Quantity, ReferenceLink, Repository
+from follow import (
+    DanglingRefError,
+    ExperimentNotFoundError,
+    FollowError,
+    NothingToCommitError,
+    Quantity,
+    ReferenceLink,
+    Repository,
+)
 from follow.merging import split_path
 
 
@@ -328,3 +338,165 @@ def test_force_is_the_deliberate_escape_hatch_for_moving_a_branch():
     repo.branch("main", a1.id, force=True)
     assert repo.branches["main"] == a1.id
     assert a2.id in repo  # still stored, just no longer on the branch
+
+
+# -- a repository whose refs no longer match its objects ---------------------------------------
+
+
+def _repo_with_a_deleted_object(tmp_path):
+    """A persisted repository whose object files were removed behind its back - the state an
+    interrupted write, a partial copy or a stray `rm` leaves behind."""
+    repo = Repository(tmp_path)
+    committed = repo.new(branch="main", structure=_cake(), title="v1", intent="x").commit()
+    for object_file in (tmp_path / "objects").glob("*.json"):
+        object_file.unlink()
+    return Repository(tmp_path), committed.id
+
+
+def test_a_branch_pointing_at_a_missing_object_raises_a_named_error_not_a_bare_keyerror(tmp_path):
+    # Regression: _resolve_ref returned whatever id refs.json named without checking it was
+    # stored, so get() failed on a bare KeyError carrying nothing but a hash.
+    repo, missing_id = _repo_with_a_deleted_object(tmp_path)
+
+    with pytest.raises(DanglingRefError) as excinfo:
+        repo.get("main")
+    message = str(excinfo.value)
+    assert "main" in message and missing_id in message
+    assert "refs are out of step" in message
+
+
+def test_contains_agrees_with_get_on_a_dangling_ref(tmp_path):
+    # `"main" in repo` used to answer True for a ref get() could not honour
+    repo, _ = _repo_with_a_deleted_object(tmp_path)
+    assert "main" not in repo
+
+
+def test_a_dangling_ref_is_still_an_experiment_not_found_error(tmp_path):
+    # callers already guarding for "this ref doesn't resolve" must keep working
+    repo, _ = _repo_with_a_deleted_object(tmp_path)
+    with pytest.raises(ExperimentNotFoundError):
+        repo.get("main")
+
+
+def test_an_unknown_name_stays_distinct_from_a_broken_one(tmp_path):
+    # the two call for completely different fixes, so they must not report the same thing
+    repo, _ = _repo_with_a_deleted_object(tmp_path)
+    with pytest.raises(ExperimentNotFoundError) as excinfo:
+        repo.get("never-existed")
+    assert not isinstance(excinfo.value, DanglingRefError)
+    assert "No experiment, branch or tag matches" in str(excinfo.value)
+
+
+def test_log_reports_a_missing_parent_instead_of_a_bare_keyerror(tmp_path):
+    repo = Repository(tmp_path)
+    v1 = repo.new(branch="main", structure=_cake(), title="v1", intent="x").commit()
+    repo.derive(v1.id, title="v2", intent="x").commit()
+    (tmp_path / "objects" / f"{v1.id}.json").unlink()  # the root goes missing, the tip stays
+
+    reloaded = Repository(tmp_path)
+    with pytest.raises(DanglingRefError, match=v1.id):
+        reloaded.log("main")
+
+
+def test_committing_onto_a_branch_whose_tip_went_missing_is_reported_clearly(tmp_path):
+    repo, missing_id = _repo_with_a_deleted_object(tmp_path)
+    builder = repo.new(branch="main", structure=_cake(220), title="v2", intent="x", parents=[])
+    with pytest.raises(DanglingRefError, match=missing_id):
+        builder.commit()
+
+
+# -- durability of the repository's own writes -------------------------------------------------
+
+
+def test_an_interrupted_write_leaves_the_previous_refs_file_intact(tmp_path, monkeypatch):
+    # Regression: refs.json was written with a plain write_text, which truncates first and fills
+    # second - an interruption in between left a half file, i.e. a repository whose branches no
+    # longer name real objects.
+    import follow.repository as repository_module
+
+    repo = Repository(tmp_path)
+    repo.new(branch="main", structure=_cake(), title="v1", intent="x").commit()
+    before = (tmp_path / "refs.json").read_text(encoding="utf-8")
+
+    def interrupted(_src, _dst):
+        raise KeyboardInterrupt("power cut")
+
+    monkeypatch.setattr(repository_module.os, "replace", interrupted)
+    with pytest.raises(KeyboardInterrupt):
+        repo.new(branch="side", structure=_cake(220), title="v2", intent="x").commit()
+    monkeypatch.undo()
+
+    assert (tmp_path / "refs.json").read_text(encoding="utf-8") == before
+    assert json.loads(before)["branches"]["main"]  # still parseable, still meaningful
+    assert not list(tmp_path.rglob(".*.tmp"))  # no stray temporary left behind
+    assert len(Repository(tmp_path)) == 1  # and the repository still reloads
+
+
+def test_accented_text_round_trips_through_the_stored_files(tmp_path):
+    # the draft writer uses ensure_ascii=False, so the encoding has to be pinned rather than
+    # left to the platform default
+    repo = Repository(tmp_path)
+    committed = repo.new(
+        branch="main", structure=_cake(), title="Cuisson à 180 °C", intent="Réduire l'écart"
+    ).commit()
+
+    raw = (tmp_path / "objects" / f"{committed.id}.json").read_text(encoding="utf-8")
+    assert "180 °C" in raw
+    assert Repository(tmp_path).get("main").title == "Cuisson à 180 °C"
+
+
+def test_a_write_torn_in_half_never_reaches_the_real_refs_file(tmp_path, monkeypatch):
+    # The failure the atomic write actually exists for: the process dies *during* the write, with
+    # half the bytes already on disk. With a plain write_text (truncate, then fill) that left a
+    # refs.json that no longer parsed at all - the repository would not even reload.
+    import builtins
+
+    repo = Repository(tmp_path)
+    repo.new(branch="main", structure=_cake(), title="v1", intent="x").commit()
+    before = (tmp_path / "refs.json").read_text(encoding="utf-8")
+
+    real_open = builtins.open
+
+    class _Torn:
+        """A file handle that writes half of what it is given, then the power goes out."""
+
+        def __init__(self, handle):
+            self._handle = handle
+
+        def write(self, text):
+            self._handle.write(text[: len(text) // 2])
+            raise KeyboardInterrupt("power cut mid-write")
+
+        def __getattr__(self, name):
+            return getattr(self._handle, name)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            self._handle.close()
+            return False
+
+    def opener(path, mode="r", *args, **kwargs):
+        handle = real_open(path, mode, *args, **kwargs)
+        # covers both the target and the ".refs.json.<pid>.tmp" the atomic write goes through
+        return _Torn(handle) if "w" in mode and "refs.json" in str(path) else handle
+
+    monkeypatch.setattr(builtins, "open", opener)
+    with pytest.raises(KeyboardInterrupt):
+        repo.new(branch="side", structure=_cake(220), title="v2", intent="x").commit()
+    monkeypatch.undo()
+
+    after = (tmp_path / "refs.json").read_text(encoding="utf-8")
+    assert after == before
+    assert json.loads(after)["branches"]["main"]  # parses, and still names the old tip
+
+    # The object file for the abandoned commit was written before the refs, so it survives on
+    # disk - an unreferenced object, exactly what git leaves behind for gc, and harmless: no
+    # branch names it. What must never happen is the mirror image, a ref naming a missing
+    # object, which is what a torn refs.json produced.
+    reloaded = Repository(tmp_path)
+    assert reloaded.get("main").title == "v1"
+    assert set(reloaded.branches) == {"main"}
+    for name in reloaded.branches:
+        assert name in reloaded  # every ref still resolves

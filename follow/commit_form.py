@@ -127,6 +127,6 @@ class CommitForm(BaseModel):
 
 def load_commit_form(path: str | Path) -> CommitForm:
     """Read and validate a commit form template from a YAML file."""
-    text = Path(path).read_text()
+    text = Path(path).read_text(encoding="utf-8")
     payload = yaml.safe_load(text) or {}
     return CommitForm.model_validate(payload)

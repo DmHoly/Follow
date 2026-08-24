@@ -31,7 +31,14 @@ from .models import (
 from .quantity import Quantity
 from .rendering import render_fiche, render_log
 from .report import batch_table, experiment_fiche, render_study_html
-from .repository import ExperimentBuilder, ExperimentNotFoundError, FollowError, NothingToCommitError, Repository
+from .repository import (
+    DanglingRefError,
+    ExperimentBuilder,
+    ExperimentNotFoundError,
+    FollowError,
+    NothingToCommitError,
+    Repository,
+)
 from .structure import Structure
 
 __all__ = [
@@ -40,6 +47,7 @@ __all__ = [
     "BatchVariation",
     "CommitForm",
     "Conclusion",
+    "DanglingRefError",
     "DiffEntry",
     "Evidence",
     "Experiment",

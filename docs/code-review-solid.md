@@ -4,9 +4,9 @@ Revue effectuée sur `302885a`, avec `pytest` au vert (221 tests).
 **Chaque bug des parties 1 et 2 a été reproduit par exécution sur le dépôt non modifié**, pas
 déduit à la lecture.
 
-> **État :** les BUG 1 à 6 sont **corrigés**, chacun accompagné de tests de régression qui
-> échouent sur le code d'avant correction. Les BUG 7 à 14 restent ouverts et leurs constats
-> ci-dessous sont toujours valables.
+> **État :** les BUG 1 à 7 et le BUG 14 sont **corrigés**, chacun accompagné de tests de
+> régression qui échouent sur le code d'avant correction. Les BUG 8 à 13 restent ouverts et
+> leurs constats ci-dessous sont toujours valables.
 
 Le socle est sain : modèles gelés, refus de commits qui abandonneraient un historique, messages
 d'erreur qui expliquent. Ce qui suit, ce sont les endroits où le code *ne dit rien* alors qu'il
@@ -188,7 +188,7 @@ explicite. Cinq tests de régression, plus un bout-en-bout sur la CLI.
 
 ## Partie 2 — Huit comportements qui mentent un peu
 
-### BUG 7 — `"main" in repo` est vrai alors que `repo.get("main")` plante
+### BUG 7 — `"main" in repo` est vrai alors que `repo.get("main")` plante  ✅ corrigé
 
 `follow/repository.py:234` & `:241` — `__contains__` / `_resolve_ref`
 
@@ -204,6 +204,14 @@ repo.get("main") → KeyError: 'exp_196855fff4faa85a'
 **Effet :** l'exception typée du projet est court-circuitée, donc les `except FollowError` de la
 CLI laissent passer une traceback nue. À corriger dans `_resolve_ref` (et valider la cohérence au
 chargement).
+
+**Correctif :** `_resolve_ref` ne renvoie un id qu'après avoir vérifié qu'il est réellement
+stocké, et lève sinon un `DanglingRefError` — sous-classe d'`ExperimentNotFoundError`, pour que
+les appelants existants continuent de fonctionner et que `ref in repo` réponde `False`, en accord
+avec ce que `get()` fera. Le message distingue « nom inconnu » de « dépôt incohérent », deux
+situations qui appellent des réparations opposées, et nomme la ref, le commit manquant et la
+sortie de secours. Même traitement pour `log()` (parent absent) et pour la pointe de branche lue
+par `_commit`. Six tests de régression.
 
 ### BUG 8 — Les ids ne sont pas adressés par contenu, malgré la docstring
 
@@ -293,7 +301,7 @@ bonne, silencieusement. `Step.order` existe pourtant et serait la clé d'alignem
 **Effet :** la résolution de conflit — l'argument de vente du `merge` — n'est fiable que si les
 deux branches n'ont ni ajouté ni supprimé d'étape.
 
-### BUG 14 — Écritures non atomiques, aucun verrou
+### BUG 14 — Écritures non atomiques, aucun verrou  ✅ corrigé (atomicité)
 
 `follow/repository.py:592-600` — `_persist_experiment` / `_persist_refs`
 
@@ -303,6 +311,20 @@ et c'est exactement l'état qui déclenche le BUG 7. Deux processus `follow comm
 
 **Correctif standard :** écrire dans un temporaire du même répertoire puis `os.replace`. Pour un
 outil qui se réclame de git, l'atomicité fait partie du contrat implicite.
+
+**Correctif :** toutes les écritures du dépôt passent par `_write_atomic` : fichier temporaire
+dans le même répertoire, `fsync`, puis `os.replace` — atomique sous POSIX comme sous Windows. Une
+coupure en cours d'écriture laisse l'ancien fichier intact au lieu d'un JSON tronqué, et le
+temporaire est nettoyé même sur `KeyboardInterrupt`. Vérifié en coupant réellement l'écriture à
+mi-parcours : avant, `refs.json` ne parsait plus du tout ; après, il est inchangé. L'encodage est
+désormais explicite (`utf-8`) sur toute la chaîne de persistance — dépôt, brouillons CLI,
+formulaire de commit — car `ensure_ascii=False` combiné à un `write_text` sans encodage cassait
+sur un titre accentué avec une locale non-UTF-8. Trois tests de régression.
+
+> **Limite subsistante :** l'atomicité garantit qu'aucun fichier n'est illisible ; ce n'est pas un
+> verrou. Deux processus qui committent simultanément écrasent toujours leurs refs mutuelles,
+> chacun écrivant une vue mémoire lue avant l'écriture de l'autre. Le résoudre demande de relire
+> `refs.json` sous verrou avant d'écrire — un changement d'une autre ampleur, non entrepris ici.
 
 ---
 
@@ -448,8 +470,8 @@ lignes chacun et ferment les trous de test correspondants.
 | ✅ 2 | Valider les `update` de `design` contre `model_fields`, puis revalider le modèle. | BUG 3 |
 | ✅ 3 | Échapper dans `render_page`, filtrer les schémas d'URI des preuves, ajouter le test `explode`. | BUG 4 |
 | ✅ 4 | Séparer étiquettes et refs : `tags` ne crée plus de tag de dépôt. | BUG 2 |
-| ✅ 5a | Rendre `_depths` itératif (fait). Écritures atomiques via `os.replace` : à faire. | BUG 5 ✅, 14 |
-| ✅ 6a | Aligner `branch()` sur les gardes de `commit()` (fait). Vérifier l'existence de l'objet dans `_resolve_ref` : à faire. | BUG 6 ✅, 7 |
+| ✅ 5 | Rendre `_depths` itératif ; écritures atomiques via `os.replace`. | BUG 5, 14 |
+| ✅ 6 | Vérifier l'existence de l'objet dans `_resolve_ref` ; aligner `branch()` sur les gardes de `commit()`. | BUG 6, 7 |
 | 7 | Faire hériter toutes les erreurs de `FollowError`, puis simplifier les `except` de la CLI. | BUG 12 |
 | 8 | Extraire `graph_section()` et un `demo_main()` partagé ; supprimer les 12 copies. | DRY |
 | 9 | Extraire un `ObjectStore` derrière `Repository` — la condition pour que tout le reste devienne testable isolément. | SRP, DIP |

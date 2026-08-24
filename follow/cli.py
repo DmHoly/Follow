@@ -68,7 +68,7 @@ def _read_structure_payload(path: str) -> dict[str, Any]:
     hand-edited JSON with a syntax error - into a clean one-line message instead of a traceback.
     """
     try:
-        text = Path(path).read_text()
+        text = Path(path).read_text(encoding="utf-8")
     except FileNotFoundError as exc:
         raise SystemExit(f"fichier introuvable : {path}") from exc
     except IsADirectoryError as exc:
@@ -102,7 +102,9 @@ def _write_draft(out: Path, builder: Any, *, force: bool) -> int | None:
     """
     if out.exists() and not force:
         return _fail(f"{out} existe déjà - passez --force pour l'écraser, ou choisissez un autre --out")
-    out.write_text(json.dumps(builder.to_draft(), indent=2, ensure_ascii=False))
+    # ensure_ascii=False keeps accented titles readable in the draft, so the encoding has to
+    # be pinned: the platform default would mangle them on a non-UTF-8 locale
+    out.write_text(json.dumps(builder.to_draft(), indent=2, ensure_ascii=False), encoding="utf-8")
     return None
 
 
@@ -118,7 +120,7 @@ def cmd_init(args: argparse.Namespace) -> int:
     (path / "objects").mkdir(parents=True, exist_ok=True)
     refs_file = path / "refs.json"
     if not refs_file.exists():
-        refs_file.write_text(json.dumps({"branches": {}, "tags": {}}, indent=2))
+        refs_file.write_text(json.dumps({"branches": {}, "tags": {}}, indent=2), encoding="utf-8")
     print(f"Dépôt Follow initialisé dans {path}")
     return 0
 

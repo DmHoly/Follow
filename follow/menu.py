@@ -184,7 +184,7 @@ def _finish(repo: Repository, builder: ExperimentBuilder, *, default_out: str = 
     if out_path.exists() and not questionary.confirm(f"{out_path} existe déjà, écraser ?", default=False, auto_enter=False).ask():
         questionary.print("Annulé.", style="fg:yellow")
         return
-    out_path.write_text(json.dumps(builder.to_draft(), indent=2, ensure_ascii=False))
+    out_path.write_text(json.dumps(builder.to_draft(), indent=2, ensure_ascii=False), encoding="utf-8")
     questionary.print(f"Brouillon écrit dans {out_path}.", style="fg:green")
     _print_form_hint(repo)
 
