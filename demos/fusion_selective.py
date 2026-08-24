@@ -129,7 +129,7 @@ def build_repository() -> Repository:
             "Combiner le melange ameliore (main) et la temperature de cuisson validee sur la "
             "branche d'essai, sans reprendre le reste de l'exploration."
         ),
-        take_steps=["[2]"],
+        take_steps=["3"],
     )
     merge_b.conclude(
         status="concluded",
@@ -206,7 +206,7 @@ def render(repo: Repository, *, embed_plotly: bool) -> str:
     resolution_section = f"""  <section class="section">
     <div class="section-head">
       <div class="section-label">Resolution de la fusion</div>
-      <h2 class="section-title">follow merge main essai-cuisson --take-steps "[2]"</h2>
+      <h2 class="section-title">follow merge main essai-cuisson --take-steps "3"</h2>
       <p class="section-desc">
         Pendant que la branche explorait la cuisson, <code>main</code> a evolue de son cote (un
         melange plus long, etape 1). Les deux lignes divergent donc sur deux etapes — Follow ne
@@ -225,7 +225,7 @@ def render(repo: Repository, *, embed_plotly: bool) -> str:
     step_index=2, step_name="Etape 3 — Cuire",
     left_src="main", left_val="170°C / 35 min", left_note="Valeur de reference, jamais retestee sur main",
     right_src="essai-cuisson", right_val="175°C / 32 min", right_note="Valide apres 3 essais (voir ci-dessus)",
-    winner="right", flag_text='--take-steps "[2]" &rarr; valeur de ref_b (essai-cuisson) explicitement demandee', arrow="&rarr;",
+    winner="right", flag_text='--take-steps "3" &rarr; valeur de ref_b (essai-cuisson) explicitement demandee', arrow="&rarr;",
 )}
 {resolution_plain_row(3, "Etape 4 — Refroidir")}
 {resolution_plain_row(4, "Etape 5 — Demouler")}
@@ -263,7 +263,7 @@ def render(repo: Repository, *, embed_plotly: bool) -> str:
       <div class="cmd">follow merge main essai-cuisson --repo labo \\</div>
       <div>&nbsp;&nbsp;--title "Fusion : temperature de cuisson optimisee" \\</div>
       <div>&nbsp;&nbsp;--intent "Adopter la cuisson validee sans reprendre le reste" \\</div>
-      <div>&nbsp;&nbsp;--take-steps "[2]" --out merge.json</div>
+      <div>&nbsp;&nbsp;--take-steps "3" --out merge.json</div>
       <br />
       <div class="cmd">follow commit merge.json --repo labo</div>
       <div>{merged.id[:14]}…  (main)  {merged.title}</div>

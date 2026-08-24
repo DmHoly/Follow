@@ -9,14 +9,32 @@ from typing import Any, Iterable, Iterator
 from .commit_form import CommitForm, load_commit_form
 from .diffing import StructureDiff, diff_structures
 from .entities import find_entity_mentions
+# re-exported here so `from follow.repository import FollowError` keeps working
+from .errors import (  # noqa: F401
+    DanglingRefError,
+    ExperimentNotFoundError,
+    FollowError,
+    MergeError,
+    NothingToCommitError,
+)
 from .ids import content_id
 from .merging import resolve_merge_paths
-from .models import Conclusion, Evidence, Experiment, Objective, ReferenceLink, Step
+from .models import Conclusion, Evidence, Experiment, Objective, ReferenceLink, Step, steps_by_order
 from .structure import Structure
 
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _step_order_key(entry: Any) -> tuple[int, str]:
+    """Sort step-diff entries by step number, not by the string form of the path.
+
+    The paths are keyed by ``order`` as a string, so plain sorting would read 1, 10, 11, 2 - the
+    diff of a ten-step protocol would be listed out of protocol order.
+    """
+    head, _, rest = entry.path.partition(".")
+    return (int(head) if head.isdigit() else 0, rest)
 
 
 def _write_atomic(path: Path, text: str) -> None:
@@ -44,52 +62,6 @@ def _write_atomic(path: Path, text: str) -> None:
     except BaseException:
         tmp.unlink(missing_ok=True)  # never leave a stray .tmp behind, not even on Ctrl-C
         raise
-
-
-class FollowError(Exception):
-    """Base class for Follow errors."""
-
-
-class ExperimentNotFoundError(FollowError, KeyError):
-    def __init__(self, ref: str, message: str | None = None):
-        super().__init__(message or f"No experiment, branch or tag matches {ref!r}")
-        self.ref = ref
-
-
-class DanglingRefError(ExperimentNotFoundError):
-    """Raised when a branch, tag or parent link points at an experiment the repository does not
-    have - a ``refs.json`` that has drifted out of step with ``objects/`` (a half-finished copy,
-    a deleted object file, an interrupted write).
-
-    It is a kind of :class:`ExperimentNotFoundError` on purpose: callers already guarding for
-    "this ref doesn't resolve" keep working, and ``ref in repo`` still answers False for it,
-    matching what :meth:`Repository.get` will actually do. What it adds is a message that says
-    the repository is inconsistent rather than that the name is unknown - the two call for very
-    different fixes.
-    """
-
-    def __init__(self, kind: str, name: str, target_id: str):
-        super().__init__(
-            name,
-            f"{kind} {name!r} points at {target_id}, which is not in this repository - its "
-            "refs are out of step with its stored objects; point it somewhere real with "
-            "repo.branch(..., force=True) / repo.tag(..., force=True), or restore the missing "
-            "object file",
-        )
-        self.kind = kind
-        self.target_id = target_id
-
-
-class NothingToCommitError(FollowError):
-    """Raised when a commit's content is identical to its target branch's current tip - the
-    same rule as `git commit` refusing with "nothing to commit, working tree clean": Follow
-    never creates a new commit that says nothing a prior one didn't already say.
-    """
-
-    def __init__(self, branch: str, tip_id: str):
-        super().__init__(f"nothing to commit: {branch!r} already points at {tip_id}, and this commit's content is identical")
-        self.branch = branch
-        self.tip_id = tip_id
 
 
 class ExperimentBuilder:
@@ -145,7 +117,14 @@ class ExperimentBuilder:
         return self
 
     def add_step(self, **kwargs: Any) -> "ExperimentBuilder":
-        kwargs.setdefault("order", len(self.steps) + 1)
+        """Append a protocol step, numbering it after the highest ``order`` already present.
+
+        Counting the steps instead (``len(self.steps) + 1``) collided the moment any order was
+        set by hand or inherited non-contiguously: ``add_step(order=2)`` followed by a plain
+        ``add_step()`` produced two steps both claiming order 2, and nothing said so until
+        :meth:`commit` ran the validator, far from the call that caused it.
+        """
+        kwargs.setdefault("order", max((s.order for s in self.steps), default=0) + 1)
         self.steps.append(Step(**kwargs))
         return self
 
@@ -367,14 +346,18 @@ class Repository:
 
     def diff_steps(self, ref_a: str, ref_b: str) -> StructureDiff:
         """Diff between two experiments' protocol (``steps``), the same way :meth:`diff`
-        compares their structure - use it to find the ``[i]``/``[i].field`` paths to pass to
-        :meth:`merge`'s ``take_steps``.
+        compares their structure - use it to find the ``<order>``/``<order>.field`` paths to pass
+        to :meth:`merge`'s ``take_steps``.
+
+        Steps are matched on their :attr:`~follow.models.Step.order`, not on their position (see
+        :func:`~follow.models.steps_by_order`), so inserting a step at the top of one protocol
+        reports one added step rather than claiming every later step changed. A path therefore
+        reads ``3.parameters.temperature``: the step *numbered* 3, the one the fiche shows as
+        "3.", whichever slot it occupies in the list.
         """
         a, b = self.get(ref_a), self.get(ref_b)
-        return diff_structures(
-            [s.model_dump(mode="json") for s in a.steps],
-            [s.model_dump(mode="json") for s in b.steps],
-        )
+        diff = diff_structures(steps_by_order(a.steps), steps_by_order(b.steps))
+        return StructureDiff(entries=sorted(diff.entries, key=_step_order_key))
 
     def find_entity(self, entity_id: str) -> list[Experiment]:
         """Every experiment in this repository that mentions the physical entity
@@ -496,7 +479,10 @@ class Repository:
         """Merge two lines of work into one experiment - the equivalent of `git merge`, with
         manual conflict resolution: ``take_structure``/``take_steps`` list the paths (in the
         format :meth:`diff`/:meth:`diff_steps` report) whose value should come from ``ref_b``
-        instead of ``ref_a``; every path you don't list keeps ``ref_a``'s value. The result gets
+        instead of ``ref_a``; every path you don't list keeps ``ref_a``'s value. A ``take_steps``
+        path names a step by its :attr:`~follow.models.Step.order` - ``"3"`` for the whole step
+        numbered 3, ``"3.parameters.temperature"`` for one of its parameters - not by its slot in
+        the list, so it keeps meaning the same step when the two protocols differ in length. The result gets
         both tips as parents (so the graph records the merge like git does), carries over
         ``ref_a``'s other references (a ``target_spec`` pointer, say - the same "carry what came
         before" behaviour as :meth:`derive`), and adds a reference back to each side (``baseline``
@@ -508,9 +494,9 @@ class Repository:
         """
         a, b = self.get(ref_a), self.get(ref_b)
         if a.id == b.id:
-            raise ValueError(f"{ref_a!r} and {ref_b!r} both resolve to {a.id} - nothing to merge")
+            raise MergeError(f"{ref_a!r} and {ref_b!r} both resolve to {a.id} - nothing to merge")
         if a.structure_type != b.structure_type:
-            raise ValueError(
+            raise MergeError(
                 f"cannot merge {ref_a!r} ({a.structure_type}) with {ref_b!r} ({b.structure_type}): "
                 "different structure types - Follow does not reconcile different domain schemas"
             )
@@ -521,11 +507,7 @@ class Repository:
             self.load_structure(b).model_dump(mode="json"),
             take_structure,
         )
-        merged_steps = resolve_merge_paths(
-            [s.model_dump(mode="json") for s in a.steps],
-            [s.model_dump(mode="json") for s in b.steps],
-            take_steps,
-        )
+        merged_steps = resolve_merge_paths(steps_by_order(a.steps), steps_by_order(b.steps), take_steps)
 
         carried_references = [r for r in a.references if r.role not in ("baseline", "merge_source")]
 
@@ -540,7 +522,7 @@ class Repository:
             hypothesis=hypothesis,
             objectives=a.objectives,
             references=carried_references,
-            steps=[Step.model_validate(s) for s in merged_steps],
+            steps=[Step.model_validate(s) for s in sorted(merged_steps.values(), key=lambda step: step["order"])],
         )
         builder.add_reference(role="baseline", experiment_id=a.id, label=f"{a.branch}: {a.title}")
         builder.add_reference(role="merge_source", experiment_id=b.id, label=f"{b.branch}: {b.title}")
@@ -701,15 +683,28 @@ class Repository:
                     "commit to a new/different branch name instead"
                 )
 
-        payload = provisional.model_dump(mode="json", exclude={"id"})
+        # The id is derived from what the experiment *says*, not from when it was written:
+        # created_at is excluded, exactly like the NothingToCommitError comparison above already
+        # does. Hashing it in made every id depend on the clock, so the same content committed
+        # twice produced two unrelated ids - which is the opposite of what content addressing is
+        # for, and quietly falsified content_id's promise that identical payloads dedupe.
+        payload = provisional.model_dump(mode="json", exclude={"id", "created_at"})
         experiment = provisional.model_copy(update={"id": content_id("experiment", payload)})
+
+        # Content addressing means an id already in the store denotes this exact content, so the
+        # commit that is already there wins - re-storing would only overwrite its created_at,
+        # rewriting an object the repository promises is immutable. This is git's dedupe rule.
+        stored = self._objects.get(experiment.id)
+        if stored is not None:
+            experiment = stored
+        else:
+            self._objects[experiment.id] = experiment
 
         # Experiment.tags are free-form descriptive labels, like `metadata` - deliberately NOT
         # repository tags. Promoting them to refs made a second experiment reusing an ordinary
         # label ("important", "à refaire") fail its commit outright, with a message about
         # repo.tag() the user had never called: one field cannot be both a throwaway label and an
         # immutable citable pointer. Repository tags are created explicitly, via repo.tag().
-        self._objects[experiment.id] = experiment
         self._branches[experiment.branch] = experiment.id
 
         if self.path is not None:

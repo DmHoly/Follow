@@ -235,7 +235,7 @@ def build_repository() -> Repository:
     m2b = repo.merge(
         "main", r2.id, title="Fusion : congelation et cuisson compensee",
         intent="Adopter la technique de congelation validee, avec sa cuisson compensee (200C/15min).",
-        take_steps=["[4]", "[5]"],
+        take_steps=["5", "6"],
     )
     m2b.conclude(status="concluded", decision="promote", summary="Technique de congelation adoptee avec sa cuisson compensee.")
     m2 = m2b.commit()
@@ -243,7 +243,7 @@ def build_repository() -> Repository:
     m3b = repo.merge(
         "main", c2.id, title="Fusion : cuisson basse temperature",
         intent="Adopter la cuisson a 170C/10min validee sur pate fraiche.",
-        take_steps=["[5]"],
+        take_steps=["6"],
     )
     m3b.conclude(
         status="concluded", decision="inconclusive",
@@ -403,13 +403,13 @@ def render(repo: Repository, *, embed_plotly: bool) -> str:
     step_index=1, step_name="Fusion 2 — essai-repos -> main",
     left_src="main", left_val="[4] aucun repos &middot; [5] 200°C/10min", left_note=f"Valeur de reference, {v1.id[:12]}",
     right_src="essai-repos", right_val="[4] congel. ≥12h &middot; [5] 200°C/15min", right_note=f"Paire validee ensemble, {r2.id[:12]}",
-    winner="right", flag_text='--take-steps "[4]" "[5]" &rarr; les deux etapes couplees sont reprises ensemble', arrow="&rarr;",
+    winner="right", flag_text='--take-steps "5" "6" &rarr; les deux etapes couplees sont reprises ensemble', arrow="&rarr;",
 )}
 {resolution_conflict_row(
     step_index=2, step_name="Fusion 3 — essai-cuisson -> main",
     left_src="main (deja fusionne)", left_val="[5] 200°C/15min", left_note="Valide pour une pate CONGELEE (fusion 2)",
     right_src="essai-cuisson", right_val="[5] 170°C/10min", right_note="Valide pour une pate FRAICHE (jamais congelee)",
-    winner="right", flag_text='--take-steps "[5]" &rarr; combinaison non testee, signalee par decision="inconclusive"', arrow="&rarr;",
+    winner="right", flag_text='--take-steps "6" &rarr; combinaison non testee, signalee par decision="inconclusive"', arrow="&rarr;",
 )}
     </div>
   </section>"""

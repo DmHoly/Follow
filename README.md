@@ -254,23 +254,25 @@ par chemin, quelle valeur garder.
 ```bash
 # `essai-cuisson` a divergé de `main` puis évolué sur 3 commits (160°C, 185°C, 175°C retenu)
 follow diff main essai-cuisson --repo mon_labo --steps
-# ~ [2].parameters.temperature: 170 C -> 175 C
-# ~ [2].parameters.duree: 35 min -> 32 min
+# ~ 3.parameters.temperature: 170 C -> 175 C
+# ~ 3.parameters.duree: 35 min -> 32 min
 
 follow merge main essai-cuisson --repo mon_labo \
   --title "Fusion : cuisson optimisée" \
   --intent "N'adopter que la température de cuisson validée sur la branche d'essai" \
-  --take-steps "[2]" \
+  --take-steps "3" \
   --out merge.json
-# merge.json : parents = [tip(main), tip(essai-cuisson)], step [2] vient de la branche,
+# merge.json : parents = [tip(main), tip(essai-cuisson)], l'étape 3 vient de la branche,
 # toutes les autres étapes (y compris les changements propres à main) restent inchangées
 follow commit merge.json --repo mon_labo
 ```
 
 `--take-structure PATH` fait la même chose pour la `Structure` (les chemins viennent de
 `follow diff`, sans `--steps`) ; `--take-steps PATH` cible le protocole (chemins de
-`follow diff --steps`, ex. `[2]` pour toute l'étape, `[2].parameters.temperature` pour un seul
-champ). Tout chemin non listé garde la valeur du premier réf (`ref_a`, la cible de la fusion) —
+`follow diff --steps`, ex. `3` pour toute l'étape numérotée 3, `3.parameters.temperature` pour un
+seul champ — une étape est désignée par son `order`, celui que la fiche affiche, et non par sa
+position dans la liste, si bien qu'un chemin garde son sens même quand les deux protocoles n'ont
+pas la même longueur). Tout chemin non listé garde la valeur du premier réf (`ref_a`, la cible de la fusion) —
 exactement comme un hunk de `git merge` qu'on ne touche pas. Voir `Repository.merge` et
 `resolve_merge_paths` (`follow/merging.py`) côté Python.
 

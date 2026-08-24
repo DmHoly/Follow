@@ -4,9 +4,9 @@ Revue effectuée sur `302885a`, avec `pytest` au vert (221 tests).
 **Chaque bug des parties 1 et 2 a été reproduit par exécution sur le dépôt non modifié**, pas
 déduit à la lecture.
 
-> **État :** les BUG 1 à 7 et le BUG 14 sont **corrigés**, chacun accompagné de tests de
-> régression qui échouent sur le code d'avant correction. Les BUG 8 à 13 restent ouverts et
-> leurs constats ci-dessous sont toujours valables.
+> **État :** les 14 bugs des parties 1 et 2 sont **corrigés**, chacun accompagné de tests de
+> régression vérifiés en échec sur le code d'avant correction. Restent ouverts les constats
+> structurels des parties 3 à 5 (SOLID, duplication, qualité des tests).
 
 Le socle est sain : modèles gelés, refus de commits qui abandonneraient un historique, messages
 d'erreur qui expliquent. Ce qui suit, ce sont les endroits où le code *ne dit rien* alors qu'il
@@ -213,7 +213,7 @@ situations qui appellent des réparations opposées, et nomme la ref, le commit 
 sortie de secours. Même traitement pour `log()` (parent absent) et pour la pointe de branche lue
 par `_commit`. Six tests de régression.
 
-### BUG 8 — Les ids ne sont pas adressés par contenu, malgré la docstring
+### BUG 8 — Les ids ne sont pas adressés par contenu, malgré la docstring  ✅ corrigé
 
 `follow/ids.py:13` · `follow/repository.py:574`
 
@@ -227,11 +227,21 @@ deux commits au contenu strictement identique
   exp_a3e19ff93f98d630 / exp_0b038151c211a248
 ```
 
-**Effet :** la déduplication annoncée n'existe pas. Deux sorties possibles : exclure `created_at`
+**Effet :** la déduplication annoncée n'existe pas.
+
+**Correctif :** `created_at` est exclu du payload haché — exactement comme la comparaison de
+`NothingToCommitError` le faisait déjà. Deux dépôts distincts produisent maintenant le même id
+pour le même contenu, et un id déjà présent dans le store fait gagner l'objet existant (règle de
+déduplication de git) plutôt que d'en réécrire le `created_at`.
+
+> **À savoir :** `conclude()` horodate `decided_at`, qui est du contenu légitime — quand la
+> décision a été prise. Une expérience conclue sans fixer ce champ garde donc un id dépendant de
+> l'horloge : les démos restent non reproductibles pour cette raison, plus à cause du hachage.
+ Deux sorties possibles : exclure `created_at`
 du hachage (et assumer la vraie adresse par contenu), ou corriger la docstring — mais pas laisser
 la promesse.
 
-### BUG 9 — `add_step()` fabrique lui-même des collisions d'ordre
+### BUG 9 — `add_step()` fabrique lui-même des collisions d'ordre  ✅ corrigé
 
 `follow/repository.py:96`
 
@@ -248,7 +258,11 @@ builder.commit() → ValidationError  # très tard
 
 **Effet :** `max(orders, default=0) + 1` supprime le piège à la source.
 
-### BUG 10 — `analyze_batch` ne voit que les champs de la première entité
+**Correctif :** appliqué — l'ordre auto vaut désormais `max(orders, default=0) + 1`, donc
+`add_step(order=2)` suivi d'un `add_step()` nu donne 2 puis 3, sans attendre le commit.
+
+
+### BUG 10 — `analyze_batch` ne voit que les champs de la première entité  ✅ corrigé
 
 `follow/batch.py:88` — `_leaf_paths(dumps[0], …)`
 
@@ -264,7 +278,11 @@ analyze_batch([{"x": 1}, {"x": 1, "extra": 999}])
 **Effet :** un facteur réel absent du rapport DOE. Il faut l'union des chemins, pas ceux du
 premier élément.
 
-### BUG 11 — Deux formatages de `Quantity`, et ils divergent
+**Correctif :** les chemins sont l'union de ceux de toutes les entités, dans l'ordre de première
+apparition. L'hétérogénéité est signalée quelle que soit l'entité qui porte le champ en trop, par
+un `BatchShapeError` qui nomme l'entité et le chemin au lieu d'un `KeyError` nu.
+
+### BUG 11 — Deux formatages de `Quantity`, et ils divergent  ✅ corrigé
 
 `follow/quantity.py:24` (`__str__`) · `follow/formatting.py:21` (`format_value`)
 
@@ -277,7 +295,11 @@ format_value() → 200 g ± 5.0 (a froid)
 paramètres d'étape / métriques de preuve (via `{quantity}`, `rendering.py:104,137`) la perdent.
 `__str__` devrait déléguer.
 
-### BUG 12 — `except FollowError` ne rattrape pas les erreurs de formulaire
+**Correctif :** `Quantity.__str__` délègue à `format_value`. Un seul rendu, donc plus de
+divergence possible — la note apparaît partout ou nulle part.
+
+
+### BUG 12 — `except FollowError` ne rattrape pas les erreurs de formulaire  ✅ corrigé
 
 `follow/commit_form.py:22`
 
@@ -290,7 +312,16 @@ qui enveloppe `commit()` dans `except FollowError` laisse remonter le cas le plu
 énumérer cinq types pour un appel, c'est la hiérarchie qui manque : `Structure.resolve` lève
 `KeyError`, `merge` `ValueError`, `split_path` `ValueError`, chacun hors de l'arbre `FollowError`.
 
-### BUG 13 — Les étapes sont diffées et fusionnées par index
+**Correctif :** toutes les erreurs vivent dans un nouveau module `follow/errors.py`, sous
+`FollowError` : `StructureTypeError`, `MergeError`, `MalformedPathError`, `PathNotFoundError`,
+`BatchShapeError`, `DesignError`, `FormValidationError`. Chacune conserve le builtin qu'elle
+était (`ValueError`/`KeyError`), donc le code existant qui les attrape continue de fonctionner.
+Le symptôme disparaît : `cli.py` écrit maintenant `except FollowError` partout au lieu d'énumérer
+cinq types pour un appel. Les `ValueError` levés dans les validateurs pydantic sont laissés tels
+quels — pydantic exige ce type et les enveloppe lui-même en `ValidationError`.
+
+
+### BUG 13 — Les étapes sont diffées et fusionnées par index  ✅ corrigé
 
 `follow/diffing.py:63` · `repo.diff_steps` / `take_steps`
 
@@ -300,6 +331,21 @@ bonne, silencieusement. `Step.order` existe pourtant et serait la clé d'alignem
 
 **Effet :** la résolution de conflit — l'argument de vente du `merge` — n'est fiable que si les
 deux branches n'ont ni ajouté ni supprimé d'étape.
+
+**Correctif :** les protocoles sont comparés et fusionnés indexés par `Step.order`, pas par
+position. Un chemin se lit désormais `3.parameters.temperature` : le 3 est le numéro d'étape
+qu'affiche la fiche. Supprimer une étape au milieu d'une branche donne
+`{'2': 'removed', '3.parameters.temperature': 'changed'}`, là où la comparaison positionnelle
+annonçait que « Reposer » était devenu « Cuire » et que « Cuire » avait disparu.
+
+> **Changement d'interface :** les chemins de `follow diff --steps` et `--take-steps` changent de
+> forme (`"[2]"` → `"3"`). Démos, tests, README et docs ont été migrés ; un chemin devenu invalide
+> lève un `PathNotFoundError` explicite plutôt que de désigner l'étape voisine.
+>
+> **Limite :** `order` n'identifie une étape que tant qu'on ne renumérote pas. Une branche qui
+> insère une étape *en décalant* les numéros suivants change l'identité de chaque étape, et le
+> diff le reflète — aucun alignement ne peut deviner l'intention derrière une renumérotation.
+
 
 ### BUG 14 — Écritures non atomiques, aucun verrou  ✅ corrigé (atomicité)
 
@@ -472,6 +518,6 @@ lignes chacun et ferment les trous de test correspondants.
 | ✅ 4 | Séparer étiquettes et refs : `tags` ne crée plus de tag de dépôt. | BUG 2 |
 | ✅ 5 | Rendre `_depths` itératif ; écritures atomiques via `os.replace`. | BUG 5, 14 |
 | ✅ 6 | Vérifier l'existence de l'objet dans `_resolve_ref` ; aligner `branch()` sur les gardes de `commit()`. | BUG 6, 7 |
-| 7 | Faire hériter toutes les erreurs de `FollowError`, puis simplifier les `except` de la CLI. | BUG 12 |
+| ✅ 7 | Faire hériter toutes les erreurs de `FollowError`, puis simplifier les `except` de la CLI. | BUG 12 |
 | 8 | Extraire `graph_section()` et un `demo_main()` partagé ; supprimer les 12 copies. | DRY |
 | 9 | Extraire un `ObjectStore` derrière `Repository` — la condition pour que tout le reste devienne testable isolément. | SRP, DIP |

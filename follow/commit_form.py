@@ -18,17 +18,8 @@ from typing import Any, Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-
-class FormValidationError(ValueError):
-    """Raised when a commit's ``form_answers`` don't satisfy a repository's commit form template
-    - missing required fields, wrong types, or a choice outside the allowed list. Lists every
-    problem at once, not just the first: this is meant to eventually drive a form UI, where
-    showing every invalid field together is far more useful than stopping at the first one.
-    """
-
-    def __init__(self, errors: list[str]):
-        super().__init__("réponses au formulaire invalides :\n  - " + "\n  - ".join(errors))
-        self.errors = errors
+# re-exported so `from follow.commit_form import FormValidationError` keeps working
+from .errors import FormValidationError  # noqa: F401
 
 
 class FormField(BaseModel):

@@ -27,6 +27,7 @@ from typing import Any, Sequence, TypeVar
 import numpy as np
 from pydantic import BaseModel
 
+from .errors import DesignError
 from .quantity import Quantity
 
 T = TypeVar("T", bound=BaseModel)
@@ -72,7 +73,7 @@ def _check_fields(reference: BaseModel, names: Sequence[str], *, what: str = "fa
     known = type(reference).model_fields
     unknown = sorted(name for name in names if name not in known)
     if unknown:
-        raise ValueError(
+        raise DesignError(
             f"{what}(s) inconnu(s) de {type(reference).__name__}: {unknown} - "
             f"champs disponibles: {sorted(known)}"
         )
@@ -240,11 +241,11 @@ def fractional_factorial(
     _check_fields(reference, list(factors))
     base_names = [name for name in factors if name not in generators]
     if not base_names:
-        raise ValueError("au moins un facteur doit être un facteur de base (absent de `generators`)")
+        raise DesignError("au moins un facteur doit être un facteur de base (absent de `generators`)")
     for name, word in generators.items():
         unknown = [w for w in word if w not in factors]
         if unknown:
-            raise ValueError(f"générateur de {name!r} référence des facteurs inconnus: {unknown}")
+            raise DesignError(f"générateur de {name!r} référence des facteurs inconnus: {unknown}")
 
     variants: list[T] = []
     for combo in itertools.product([-1, 1], repeat=len(base_names)):

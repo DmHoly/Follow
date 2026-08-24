@@ -207,7 +207,7 @@ def test_merge_via_cli_selects_a_single_step_from_the_test_branch(tmp_path, caps
 
     assert main(["diff", v1_id, branch_tip_id, "--repo", repo_path, "--steps"]) == 0
     diff_out = capsys.readouterr().out
-    assert "[2].parameters.temperature" in diff_out
+    assert "3.parameters.temperature" in diff_out  # step numbered 3, not list slot 2
 
     merge_draft = str(tmp_path / "merge.json")
     assert (
@@ -223,7 +223,7 @@ def test_merge_via_cli_selects_a_single_step_from_the_test_branch(tmp_path, caps
                 "--intent",
                 "Adopter uniquement la cuisson optimisée",
                 "--take-steps",
-                "[2]",
+                "3",
                 "--out",
                 merge_draft,
             ]

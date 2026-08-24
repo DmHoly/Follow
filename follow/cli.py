@@ -183,7 +183,7 @@ def cmd_commit(args: argparse.Namespace) -> int:
         _load_structure_class(payload["structure_type"])
         builder = repo.load_draft(payload)
         experiment = builder.commit()
-    except (ValidationError, FollowError, KeyError, ValueError) as exc:
+    except (FollowError, ValidationError) as exc:  # Follow's own errors, plus pydantic's on a hand-edited draft
         return _fail(str(exc))
     print(f"{experiment.id}  ({experiment.branch})  {experiment.title}")
     return 0
@@ -269,7 +269,7 @@ def cmd_merge(args: argparse.Namespace) -> int:
             author=args.author,
             hypothesis=args.hypothesis,
         )
-    except (FollowError, ValueError, KeyError, IndexError, TypeError) as exc:
+    except FollowError as exc:
         return _fail(str(exc))
     out = Path(args.out)
     if (failure := _write_draft(out, builder, force=args.force)) is not None:
@@ -340,7 +340,7 @@ def cmd_explode(args: argparse.Namespace) -> int:
 
     try:
         variation = analyze_batch(entities, ignore=args.ignore)
-    except (KeyError, IndexError, TypeError) as exc:
+    except FollowError as exc:
         return _fail(f"entités hétérogènes dans {args.path!r}: {exc}")
 
     if args.out is not None:

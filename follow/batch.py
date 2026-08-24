@@ -20,6 +20,7 @@ from typing import Any, Sequence
 
 from pydantic import BaseModel
 
+from .errors import BatchShapeError
 from .formatting import is_quantity_leaf
 from .merging import get_path, split_path
 
@@ -84,8 +85,21 @@ def analyze_batch(entities: Sequence[Any], *, ignore: Sequence[str] = ()) -> Bat
     if not dumps:
         return BatchVariation(entity_count=0)
 
+    # The union of every entity's leaf paths, in order of first appearance - not just the first
+    # entity's. Reading them off dumps[0] alone was asymmetric: an extra field on entity 2..N was
+    # dropped from the analysis without a word (a real DOE factor missing from the report), while
+    # the mirror case - a field only entity 1 had - did raise. Heterogeneity is now reported
+    # whichever entity the extra field is on.
     paths: list[str] = []
-    _leaf_paths(dumps[0], "", paths)
+    seen: set[str] = set()
+    for dump in dumps:
+        entity_paths: list[str] = []
+        _leaf_paths(dump, "", entity_paths)
+        for path in entity_paths:
+            if path not in seen:
+                seen.add(path)
+                paths.append(path)
+
     ignored = set(ignore)
 
     constant: dict[str, Any] = {}
@@ -94,7 +108,17 @@ def analyze_batch(entities: Sequence[Any], *, ignore: Sequence[str] = ()) -> Bat
         if path.split(".", 1)[0].split("[", 1)[0] in ignored:
             continue
         tokens = split_path(path)
-        values = [get_path(dump, tokens) for dump in dumps]
+        values = []
+        for index, dump in enumerate(dumps):
+            try:
+                values.append(get_path(dump, tokens))
+            except (KeyError, IndexError, TypeError) as exc:
+                raise BatchShapeError(
+                    f"entity {index} has no {path!r}, but another entity in this batch does - "
+                    "analyze_batch compares entities of the same shape (typically all instances "
+                    "of one Structure subclass); a genuinely optional field cannot be told apart "
+                    "from a missing one here"
+                ) from exc
         if all(v == values[0] for v in values):
             constant[path] = values[0]
         else:

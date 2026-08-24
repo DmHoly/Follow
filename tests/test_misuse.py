@@ -12,14 +12,20 @@ from pydantic import ValidationError
 from examples.mosfet import Layer, MOSFETStructure
 from examples.recipe import BakeStep, CakeRecipe
 from follow import (
+    BatchShapeError,
     DanglingRefError,
     ExperimentNotFoundError,
     FollowError,
     NothingToCommitError,
+    PathNotFoundError,
     Quantity,
     ReferenceLink,
     Repository,
+    Structure,
+    analyze_batch,
+    format_value,
 )
+from follow.commit_form import CommitForm
 from follow.merging import split_path
 
 
@@ -500,3 +506,158 @@ def test_a_write_torn_in_half_never_reaches_the_real_refs_file(tmp_path, monkeyp
     assert set(reloaded.branches) == {"main"}
     for name in reloaded.branches:
         assert name in reloaded  # every ref still resolves
+
+
+# -- protocol steps are matched on their number, not their slot ---------------------------------
+
+
+def _protocol_repo():
+    """main: Mélanger(1), Reposer(2), Cuire(3) - side drops the resting step and bakes hotter,
+    without renumbering what remains."""
+    repo = Repository()
+    builder = repo.new(branch="main", structure=_cake(), title="v1", intent="x")
+    builder.add_step(order=1, name="Mélanger")
+    builder.add_step(order=2, name="Reposer")
+    builder.add_step(order=3, name="Cuire", parameters={"temperature": Quantity(value=180, unit="C")})
+    v1 = builder.commit()
+
+    side = repo.derive(v1.id, new_branch="side", title="v2", intent="drop the rest, bake hotter")
+    side.steps = [s for s in side.steps if s.name != "Reposer"]
+    side.steps[-1] = side.steps[-1].model_copy(update={"parameters": {"temperature": Quantity(value=200, unit="C")}})
+    return repo, v1, side.commit()
+
+
+def test_removing_a_step_reads_as_one_removal_not_a_cascade_of_changes():
+    # Regression: steps were compared position by position, so dropping a step in the middle
+    # shifted every later one - the diff claimed "Reposer" had become "Cuire" and that "Cuire"
+    # had been deleted, when only one step was removed and one parameter changed.
+    repo, _, tip = _protocol_repo()
+    entries = {e.path: e.kind for e in repo.diff_steps("main", tip.id)}
+
+    assert entries == {"2": "removed", "3.parameters.temperature": "changed"}
+
+
+def test_a_take_steps_path_names_the_step_number_not_the_list_slot():
+    repo, _, tip = _protocol_repo()
+    merged = repo.merge(
+        "main", tip.id, title="merge", intent="take just the temperature",
+        take_steps=["3.parameters.temperature"],
+    ).commit()
+
+    by_order = {s.order: s for s in merged.steps}
+    assert set(by_order) == {1, 2, 3}  # main's resting step is kept: it was not listed
+    assert by_order[3].parameters["temperature"].value == 200  # taken from the branch
+    assert by_order[2].name == "Reposer"
+
+
+def test_taking_a_whole_step_by_its_number():
+    repo, _, tip = _protocol_repo()
+    merged = repo.merge("main", tip.id, title="merge", intent="x", take_steps=["3"]).commit()
+    assert {s.order for s in merged.steps} == {1, 2, 3}
+    assert merged.steps[-1].parameters["temperature"].value == 200
+
+
+def test_a_step_number_absent_from_the_branch_is_reported_not_silently_misread():
+    repo, _, tip = _protocol_repo()
+    with pytest.raises(PathNotFoundError, match="'2'"):
+        repo.merge("main", tip.id, title="merge", intent="x", take_steps=["2"])
+
+
+def test_merged_steps_come_back_in_protocol_order():
+    repo, v1, tip = _protocol_repo()
+    merged = repo.merge("main", tip.id, title="merge", intent="x", take_steps=["3"]).commit()
+    assert [s.order for s in merged.steps] == sorted(s.order for s in merged.steps)
+
+
+def test_step_diff_is_listed_in_protocol_order_not_lexicographic_order():
+    # keys are the order as a string, so a plain sort would read 1, 10, 11, 2
+    repo = Repository()
+    builder = repo.new(branch="main", structure=_cake(), title="v1", intent="x")
+    for order in range(1, 12):
+        builder.add_step(order=order, name=f"étape {order}")
+    v1 = builder.commit()
+
+    side = repo.derive(v1.id, new_branch="side", title="v2", intent="rename them all")
+    side.steps = [s.model_copy(update={"name": f"{s.name} bis"}) for s in side.steps]
+    tip = side.commit()
+
+    orders = [int(e.path.split(".")[0]) for e in repo.diff_steps("main", tip.id)]
+    assert orders == sorted(orders)
+    assert orders[:3] == [1, 2, 3]
+
+
+# -- the error hierarchy ------------------------------------------------------------------------
+
+
+def test_every_error_follow_raises_is_a_follow_error():
+    # Regression: FollowError was documented as the base class, but merge raised ValueError,
+    # Structure.resolve KeyError, split_path ValueError, the commit form ValueError... so
+    # `except FollowError` around a commit missed the most expected failure of all.
+    import follow
+
+    raisers = [
+        lambda: Repository().get("nope"),
+        lambda: Structure.resolve("never.Registered"),
+        lambda: split_path("steps[abc]"),
+        lambda: follow.analyze_batch([{"x": 1}, {"x": 1, "extra": 2}]),
+        lambda: follow.sweep(_cake(), "not_a_field", [1, 2]),
+        lambda: CommitForm.model_validate({"title": "t", "fields": [{"name": "a", "label": "A"}]}).validate_answers({}),
+    ]
+    for raiser in raisers:
+        with pytest.raises(FollowError):
+            raiser()
+
+
+def test_the_builtin_each_error_used_to_be_still_catches_it():
+    # callers written against the old behaviour must keep working
+    with pytest.raises(KeyError):
+        Structure.resolve("never.Registered")
+    with pytest.raises(ValueError):
+        split_path("steps[abc]")
+    with pytest.raises(ValueError):
+        CommitForm.model_validate({"title": "t", "fields": [{"name": "a", "label": "A"}]}).validate_answers({})
+
+
+# -- content addressing, step numbering, batch shape, one Quantity renderer ---------------------
+
+
+def test_identical_content_yields_the_same_id_in_a_fresh_repository():
+    # Regression: created_at was part of the hashed payload, so content_id's promise that
+    # identical payloads dedupe was false - the id depended on the clock, not on the content.
+    first = Repository().new(branch="main", structure=_cake(), title="v1", intent="x").commit()
+    second = Repository().new(branch="main", structure=_cake(), title="v1", intent="x").commit()
+    assert first.id == second.id
+
+
+def test_a_different_branch_or_parent_still_yields_a_different_id():
+    repo = Repository()
+    a = repo.new(branch="main", structure=_cake(), title="v1", intent="x").commit()
+    b = repo.new(branch="side", structure=_cake(), title="v1", intent="x").commit()
+    assert a.id != b.id  # branch is part of the content
+
+
+def test_add_step_numbers_after_the_highest_order_not_the_count():
+    # Regression: the auto order was len(steps) + 1, which collided with any hand-set order -
+    # and nothing said so until commit ran the validator.
+    repo = Repository()
+    builder = repo.new(branch="main", structure=_cake(), title="v1", intent="x")
+    builder.add_step(name="A", order=2)
+    builder.add_step(name="B")
+
+    assert [s.order for s in builder.steps] == [2, 3]
+    builder.commit()  # no longer a late ValidationError
+
+
+def test_a_field_present_only_on_a_later_entity_is_reported_not_dropped():
+    # Regression: leaf paths were read off the first entity alone, so an extra field on entity
+    # 2..N vanished from the analysis - a real DOE factor missing from the report.
+    with pytest.raises(BatchShapeError, match="extra"):
+        analyze_batch([{"x": 1}, {"x": 1, "extra": 999}])
+
+
+def test_str_and_format_value_render_a_quantity_identically():
+    # Regression: two separate implementations that had drifted - str() dropped `note`, so a
+    # fiche showed it on structure values and silently lost it on step parameters.
+    quantity = Quantity(value=200, unit="g", uncertainty=5, note="à froid")
+    assert str(quantity) == format_value(quantity.model_dump(mode="json"))
+    assert "à froid" in str(quantity)

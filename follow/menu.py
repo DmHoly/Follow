@@ -32,6 +32,8 @@ import webbrowser
 from pathlib import Path
 from typing import Any, Callable
 
+from pydantic import ValidationError
+
 from .cli import DEFAULT_REPO, _load_structure_class, _print_form_hint, _read_structure_payload, _repo
 from .diffing import DiffEntry
 from .graphing import render_graph_html
@@ -374,5 +376,6 @@ def run_menu(repo_path: str = DEFAULT_REPO) -> int:
         action = next(fn for label, fn in _ACTIONS if label == choice)
         try:
             action(repo)
-        except (FollowError, SystemExit, ValueError, KeyError) as exc:
+        # SystemExit comes from the shared CLI helpers; ValidationError from a bad structure file
+        except (FollowError, SystemExit, ValidationError) as exc:
             questionary.print(f"Erreur : {exc}", style="fg:red")

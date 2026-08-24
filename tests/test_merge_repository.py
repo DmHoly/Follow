@@ -68,7 +68,7 @@ def _repo_with_a_selective_merge() -> tuple[Repository, dict]:
         a3.id,
         title="Fusion: melange ameliore + cuisson optimisee",
         intent="Combiner le meilleur melange (main) et la temperature de cuisson optimisee (essai-cuisson)",
-        take_steps=["[2]"],
+        take_steps=["3"],
     )
     merged = merge_builder.commit()
 

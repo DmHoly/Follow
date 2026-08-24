@@ -26,7 +26,7 @@ from .diffing import StructureDiff
 from .formatting import format_value
 from .graphing import build_graph_figure
 from .merging import get_path, split_path
-from .models import Evidence, Experiment, Objective, ObjectiveResult
+from .models import Evidence, Experiment, Objective, ObjectiveResult, steps_by_order
 from .repository import FollowError
 
 if TYPE_CHECKING:
@@ -759,7 +759,8 @@ def _merge_attribution_html(repo: "Repository", exp: Experiment) -> str:
         if kind == "structure":
             merged_dump: Any = repo.load_structure(exp).model_dump(mode="json")
         else:
-            merged_dump = [s.model_dump(mode="json") for s in exp.steps]
+            # keyed by order, matching the paths repo.diff_steps now reports
+            merged_dump = steps_by_order(exp.steps)
         for entry in diff_ab:
             tokens = split_path(entry.path)
             try:

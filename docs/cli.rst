@@ -82,7 +82,8 @@ fusionner dedans). Voir :doc:`merging` pour la sémantique complète.
    * - ``--take-structure PATH``
      - Répétable — chemin de structure à prendre de ``ref_b``.
    * - ``--take-steps PATH``
-     - Répétable — chemin d'étape à prendre de ``ref_b``.
+     - Répétable — chemin d'étape à prendre de ``ref_b``, désigné par le ``order`` de l'étape
+       (``"3"``, ``"3.parameters.temperature"``) et non par sa position.
    * - ``--author`` / ``--hypothesis`` / ``--out``
      - Comme ``new``.
 
