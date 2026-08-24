@@ -34,7 +34,8 @@ pip install -e ".[dev,docs]"
 
 Python ≥ 3.11 requis. Dépendances : `pydantic` (les modèles), `plotly` (le graphe de filiation),
 `numpy` (générateurs de plan d'expériences, `follow.design`) et `pyyaml` (formulaires de commit,
-`follow.commit_form`) — pas de Graphviz, pas de base de données, pas de moteur de template.
+`follow.commit_form`) — pas de Graphviz, pas de base de données, pas de moteur de template. Extras
+optionnels : `.[dev]` (tests), `.[docs]` (Sphinx), `.[menu]` (`questionary`, pour `follow menu`).
 
 ```python
 >>> import follow
@@ -222,6 +223,25 @@ la volée pour retrouver la classe `Structure` enregistrée, donc vos domaines (
 et consorts) doivent être importables (présents dans le répertoire courant ou installés).
 
 `follow --help` / `follow <sous-commande> --help` détaille chaque option.
+
+### Menu interactif (`follow menu`)
+
+Naviguer, démarrer une expérience, en dériver une variante, clôturer un brouillon (conclure +
+committer), fusionner deux branches, générer un rapport ou le graphe — sans mémoriser les
+sous-commandes ci-dessus. Chaque action appelle exactement la même API
+(`Repository`/`ExperimentBuilder`) ; rien n'est réimplémenté, seule la navigation change.
+
+```bash
+pip install "follow[menu]"   # ajoute questionary, non installé par défaut
+follow menu --repo mon_labo
+```
+
+L'authoring de la `Structure` elle-même n'est pas réinventé : comme `--structure-file`, le menu
+pointe vers un fichier JSON existant plutôt que de tenter de générer un formulaire pour une forme
+Pydantic arbitraire. Les invites interactives portent sur ce qui a une forme fixe et connue
+(objectifs, preuves, conclusion) et sur la navigation (choisir une expérience, une branche, les
+chemins à prendre lors d'une fusion — dans une vraie liste plutôt qu'en recopiant des
+identifiants à la main). Voir `docs/cli.rst`.
 
 ## Fusionner deux lignes de travail (`follow merge`)
 

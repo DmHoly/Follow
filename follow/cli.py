@@ -380,6 +380,12 @@ def cmd_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_menu(args: argparse.Namespace) -> int:
+    from .menu import run_menu  # optional dependency (questionary) - only needed for this command
+
+    return run_menu(args.repo)
+
+
 # -- argument parsing --------------------------------------------------------------------------
 
 
@@ -519,6 +525,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_report.add_argument("--no-embed", action="store_true", help="utiliser le CDN Plotly au lieu de l'inclure (fichier plus léger)")
     p_report.add_argument("--open", action="store_true", help="ouvrir le fichier dans le navigateur")
     p_report.set_defaults(func=cmd_report)
+
+    p_menu = subparsers.add_parser(
+        "menu", help="menu interactif (naviguer, lancer, suivre, clôturer une expérience) — nécessite `questionary`"
+    )
+    add_repo_arg(p_menu)
+    p_menu.set_defaults(func=cmd_menu)
 
     return parser
 

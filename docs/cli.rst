@@ -176,3 +176,34 @@ Génère un compte rendu d'étude complet, sans IA, dérivé du dépôt — voir
      - Utiliser le CDN Plotly au lieu de l'inclure (fichier plus léger, nécessite une connexion).
    * - ``--open``
      - Ouvrir le fichier dans le navigateur.
+
+``follow menu``
+-------------------
+
+Menu interactif : naviguer dans le dépôt, démarrer une expérience, en dériver une variante,
+clôturer un brouillon (conclure + committer), fusionner deux branches, générer un rapport ou le
+graphe — sans mémoriser les sous-commandes et leurs options. Chaque action du menu appelle
+exactement la même API (:class:`~follow.repository.Repository`/
+:class:`~follow.repository.ExperimentBuilder`) que les sous-commandes ci-dessus ; rien n'est
+réimplémenté, seule la navigation change.
+
+.. code-block:: bash
+
+   follow menu --repo mon_labo
+
+Nécessite `questionary <https://questionary.readthedocs.io/>`_, non installé par défaut :
+
+.. code-block:: bash
+
+   pip install "follow[menu]"
+
+Sans ``questionary`` installé, ``follow menu`` échoue avec un message clair plutôt qu'une
+trace d'erreur ; toutes les autres sous-commandes fonctionnent normalement (voir
+:mod:`follow.menu`).
+
+L'authoring de la ``Structure`` elle-même n'est volontairement pas réinventé dans le menu : comme
+``follow new --structure-file``, on pointe vers un fichier JSON existant — un formulaire
+générique ne peut pas construire en toute sécurité n'importe quelle forme Pydantic arbitraire. Le
+menu ajoute des invites interactives pour ce qui a une forme fixe et connue (objectifs, preuves,
+conclusion) et pour la navigation (choisir une expérience, une branche, les chemins à prendre
+lors d'une fusion, dans une vraie liste plutôt qu'en recopiant des identifiants à la main).

@@ -434,6 +434,10 @@ lot (``CakeTrialBatch`` avec ses ``trials`` déjà générés par ``follow.desig
 prépare comme n'importe quel ``--structure-file``, puisque le format JSON est le même que
 ``ChocolateCake.model_dump(mode="json")``.
 
+``follow menu`` (nécessite ``pip install "follow[menu]"``) offre la même chose sans mémoriser ni
+les sous-commandes ni leurs options : naviguer, démarrer une expérience, la conclure, fusionner,
+générer un rapport — via des invites interactives qui appellent exactement la même API.
+
 Pour aller plus loin
 -------------------------
 

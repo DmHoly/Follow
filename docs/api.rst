@@ -90,3 +90,9 @@ follow.cli
 
 .. automodule:: follow.cli
    :members:
+
+follow.menu
+--------------
+
+.. automodule:: follow.menu
+   :members:
