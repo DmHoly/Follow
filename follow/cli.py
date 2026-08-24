@@ -22,7 +22,7 @@ from .batch import analyze_batch
 from .entities import find_entity_mentions
 from .formatting import format_value
 from .graphing import render_graph_html
-from .rendering import render_fiche, render_log
+from .rendering import log_line, render_fiche
 from .report import batch_table, escape_html, render_page, render_study_html
 from .repository import FollowError, Repository
 from .structure import Structure
@@ -190,15 +190,15 @@ def cmd_commit(args: argparse.Namespace) -> int:
 
 
 def cmd_log(args: argparse.Namespace) -> int:
-    if args.number < 0:
+    if args.number is not None and args.number < 0:
         return _fail("-n/--number doit être positif")
     repo = _repo(args.repo)
     try:
         history = repo.log(args.ref)
     except FollowError as exc:
         return _fail(str(exc))
-    for exp in history[: args.number]:
-        print(f"{exp.id}  ({exp.branch})  {exp.title}  [{exp.conclusion.status}]")
+    for exp in history if args.number is None else history[: args.number]:
+        print(log_line(exp))
     return 0
 
 
@@ -225,7 +225,7 @@ def cmd_trace(args: argparse.Namespace) -> int:
     for exp in matches:
         paths = find_entity_mentions(exp.structure, args.entity_id)
         where = ", ".join(p or "(racine)" for p in paths)
-        print(f"{exp.id}  ({exp.branch})  {exp.title}  [{exp.conclusion.status}]  -- {where}")
+        print(log_line(exp, suffix=f"  -- {where}"))
     return 0
 
 
@@ -485,7 +485,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_log = subparsers.add_parser("log", help="historique d'une branche/tag/expérience")
     add_repo_arg(p_log)
     p_log.add_argument("ref", nargs="?", default="main")
-    p_log.add_argument("-n", "--number", type=int, default=10**9)
+    p_log.add_argument("-n", "--number", type=int, default=None, help="limiter aux N plus récents (défaut : tout)")
     p_log.set_defaults(func=cmd_log)
 
     p_show = subparsers.add_parser("show", help="afficher la fiche d'une expérience")

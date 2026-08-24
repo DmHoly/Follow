@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Iterator
 
@@ -19,12 +18,8 @@ from .errors import (  # noqa: F401
 )
 from .ids import content_id
 from .merging import resolve_merge_paths
-from .models import Conclusion, Evidence, Experiment, Objective, ReferenceLink, Step, steps_by_order
+from .models import Conclusion, Evidence, Experiment, Objective, ReferenceLink, Step, steps_by_order, utcnow
 from .structure import Structure
-
-
-def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 def _step_order_key(entry: Any) -> tuple[int, str]:
@@ -143,7 +138,7 @@ class ExperimentBuilder:
 
     def conclude(self, **kwargs: Any) -> "ExperimentBuilder":
         kwargs.setdefault("status", "concluded")
-        kwargs.setdefault("decided_at", _utcnow())
+        kwargs.setdefault("decided_at", utcnow())
         self.conclusion = Conclusion(**kwargs)
         return self
 

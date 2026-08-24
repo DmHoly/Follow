@@ -121,7 +121,7 @@ def full_factorial(reference: T, *, id_field: str | None = None, **factors: Sequ
     names = list(factors)
     _check_fields(reference, names)
     grids = [factors[name] for name in names]
-    variants = [_variant(reference, dict(zip(names, combo))) for combo in itertools.product(*grids)]
+    variants = [_variant(reference, dict(zip(names, combo, strict=True))) for combo in itertools.product(*grids)]
     return _number(variants, id_field)
 
 
@@ -249,7 +249,7 @@ def fractional_factorial(
 
     variants: list[T] = []
     for combo in itertools.product([-1, 1], repeat=len(base_names)):
-        signs = dict(zip(base_names, combo))
+        signs = dict(zip(base_names, combo, strict=True))
         for name, word in generators.items():
             sign = 1
             for w in word:

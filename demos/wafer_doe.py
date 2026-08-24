@@ -26,14 +26,13 @@ Run: python -m demos.wafer_doe [--out demos/output/wafer_doe.html] [--embed]
 
 from __future__ import annotations
 
-import argparse
-from pathlib import Path
 
+from demos._main import run_demo
 from demos._report import batch_table, experiment_fiche, render_report
 from examples.wafer_doe import Wafer, WaferLot
 from follow import Quantity, Repository, analyze_batch
+from follow.report import graph_section
 from follow.design import full_factorial, lin
-from follow.graphing import build_graph_figure
 
 _REFERENCE_WAFER = Wafer(
     slot=0,
@@ -142,29 +141,14 @@ def render(repo: Repository, *, embed_plotly: bool) -> str:
     lot_a = repo.log("main")[-1]
     lot_b = repo.get("combinaison-retenue")
 
-    fig = build_graph_figure(repo)
-    plot_html = fig.to_html(
-        include_plotlyjs=True if embed_plotly else "cdn",
-        full_html=False,
-        div_id="follow-graph",
-        config={"displaylogo": False, "responsive": True, "modeBarButtonsToRemove": ["toImage"]},
+    graph_section_html = graph_section(
+        repo,
+        heading="2 commits : split factoriel puis confirmation",
+        description=(
+            "Un seul plan factoriel (LOT-A, 25 wafers) suivi d'une confirmation homogene (LOT-B, 5 wafers) - chacun est un unique commit Follow, quel que soit le nombre d'entites que sa structure contient."
+        ),
+        embed_plotly=embed_plotly,
     )
-    graph_section = f"""  <section class="section">
-    <div class="section-head">
-      <div class="section-label">Graphe de filiation</div>
-      <h2 class="section-title">2 commits : split factoriel puis confirmation</h2>
-      <p class="section-desc">
-        Un seul plan factoriel (LOT-A, 25 wafers) suivi d'une confirmation homogene
-        (LOT-B, 5 wafers) - chacun est un unique commit Follow, quel que soit le nombre
-        d'entites que sa structure contient.
-      </p>
-    </div>
-    <div class="graph-frame">
-      <div class="graph-inner">
-        {plot_html}
-      </div>
-    </div>
-  </section>"""
 
     lot_a_structure = repo.load_structure(lot_a)
     lot_a_variation = analyze_batch(lot_a_structure.wafers, ignore=["slot"])
@@ -207,7 +191,7 @@ def render(repo: Repository, *, embed_plotly: bool) -> str:
 )}
   </section>"""
 
-    footer = f"""<footer class="footer section">
+    footer = """<footer class="footer section">
     <div class="section-head">
       <div class="section-label">Reproduire</div>
       <h2 class="section-title">Le cas d'école : un plan factoriel n'est pas couvert par git</h2>
@@ -248,24 +232,18 @@ def render(repo: Repository, *, embed_plotly: bool) -> str:
             "<b>2</b> facteurs de variation",
             "<b>5</b> wafers de confirmation (LOT-B)",
         ],
-        sections=[graph_section, lot_a_section, lot_b_section],
+        sections=[graph_section_html, lot_a_section, lot_b_section],
         footer=footer,
     )
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--out", default="demos/output/wafer_doe.html")
-    parser.add_argument("--embed", action="store_true", help="embed plotly.js (~4.8MB, fully offline) instead of using the CDN")
-    args = parser.parse_args()
-
-    repo = build_repository()
-    html = render(repo, embed_plotly=args.embed)
-
-    out = Path(args.out)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(html, encoding="utf-8")
-    print(f"wrote {out} ({out.stat().st_size} bytes)")
+    run_demo(
+        doc=__doc__,
+        default_out="demos/output/wafer_doe.html",
+        build_repository=build_repository,
+        render=render,
+    )
 
 
 if __name__ == "__main__":

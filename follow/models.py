@@ -8,7 +8,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from .quantity import Quantity
 
 
-def _utcnow() -> datetime:
+def utcnow() -> datetime:
+    """Now, in UTC. Shared so the models and the repository cannot drift onto two clocks."""
     return datetime.now(timezone.utc)
 
 
@@ -137,7 +138,7 @@ class Experiment(BaseModel):
     id: str
     parents: list[str] = Field(default_factory=list)
     branch: str
-    created_at: datetime = Field(default_factory=_utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
     author: str | None = None
 
     title: str

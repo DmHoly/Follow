@@ -83,7 +83,7 @@ def _layout(dag: dict[str, list[str]]) -> dict[str, tuple[float, float]]:
         if d == 0:
             nodes.sort()
         else:
-            def barycenter(node: str, _d: int = d) -> float:
+            def barycenter(node: str) -> float:
                 xs = [positions[p][0] for p in dag.get(node, []) if p in positions]
                 return sum(xs) / len(xs) if xs else 0.0
 
@@ -125,19 +125,18 @@ def build_graph_figure(repo: "Repository") -> go.Figure:
         showlegend=False,
     )
 
+    # positions come from repo.graph(), which is built from these same experiments, so every
+    # node id resolves - the previous `if exp else` fallbacks were unreachable
     node_x, node_y, colors, labels, hover = [], [], [], [], []
     for node_id, (x, y) in positions.items():
-        exp = experiments.get(node_id)
+        exp = experiments[node_id]
         node_x.append(x)
         node_y.append(y)
-        status = exp.conclusion.status if exp else "draft"
-        colors.append(_STATUS_COLORS.get(status, "#9e9e9e"))
-        labels.append(exp.title if exp else node_id)
+        colors.append(_STATUS_COLORS.get(exp.conclusion.status, "#9e9e9e"))
+        labels.append(exp.title)
         hover.append(
             f"{exp.title}<br>id: {exp.id}<br>branche: {exp.branch}<br>"
             f"statut: {exp.conclusion.status}<br>intention: {exp.intent}"
-            if exp
-            else node_id
         )
 
     node_trace = go.Scatter(

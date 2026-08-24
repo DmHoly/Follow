@@ -22,13 +22,12 @@ Run: python -m demos.chocolate_fondant [--out demos/output/chocolate_fondant.htm
 
 from __future__ import annotations
 
-import argparse
-from pathlib import Path
 
-from demos._report import fiche_card, render_report, resolution_conflict_row, resolution_plain_row, trial_card
+from demos._main import run_demo
+from demos._report import fiche_card, render_report, resolution_conflict_row, trial_card
 from examples.chocolate_fondant import Mold, MoltenChocolateCake
 from follow import Quantity, Repository
-from follow.graphing import build_graph_figure
+from follow.report import graph_section, status_legend
 
 SOURCES = [
     dict(
@@ -230,7 +229,7 @@ def build_repository() -> Repository:
         take_structure=["egg_yolks"],
     )
     m1b.conclude(status="concluded", decision="promote", summary="Jaunes supplementaires adoptes, aucune autre variable modifiee.")
-    m1 = m1b.commit()
+    m1b.commit()
 
     m2b = repo.merge(
         "main", r2.id, title="Fusion : congelation et cuisson compensee",
@@ -238,7 +237,7 @@ def build_repository() -> Repository:
         take_steps=["5", "6"],
     )
     m2b.conclude(status="concluded", decision="promote", summary="Technique de congelation adoptee avec sa cuisson compensee.")
-    m2 = m2b.commit()
+    m2b.commit()
 
     m3b = repo.merge(
         "main", c2.id, title="Fusion : cuisson basse temperature",
@@ -286,18 +285,8 @@ def render(repo: Repository, *, embed_plotly: bool) -> str:
     j1, j2 = repo.log("essai-jaunes")[1], repo.log("essai-jaunes")[0]
     r1, r2 = repo.log("essai-repos")[1], repo.log("essai-repos")[0]
     c1, c2 = repo.log("essai-cuisson")[1], repo.log("essai-cuisson")[0]
-    m1 = [e for e in repo if e.title == "Fusion : jaunes supplementaires"][0]
-    m2 = [e for e in repo if e.title == "Fusion : congelation et cuisson compensee"][0]
     m3 = [e for e in repo if e.title == "Fusion : cuisson basse temperature"][0]
     validation = repo.get("recette-optimale")
-
-    fig = build_graph_figure(repo)
-    plot_html = fig.to_html(
-        include_plotlyjs=True if embed_plotly else "cdn",
-        full_html=False,
-        div_id="follow-graph",
-        config={"displaylogo": False, "responsive": True, "modeBarButtonsToRemove": ["toImage"]},
-    )
 
     sources_rows = "\n".join(
         f'          <tr><td><a href="{s["url"]}">{s["name"]}</a></td><td>{s["note"]}</td><td>{s["used_for"]}</td></tr>'
@@ -324,30 +313,19 @@ def render(repo: Repository, *, embed_plotly: bool) -> str:
     </div>
   </section>"""
 
-    graph_section = f"""  <section class="section">
-    <div class="section-head">
-      <div class="section-label">Graphe de filiation</div>
-      <h2 class="section-title">3 branches, 3 fusions, 1 validation</h2>
-      <p class="section-desc">
-        <code>essai-jaunes</code> ne touche que la structure (les jaunes d'oeufs) ;
-        <code>essai-repos</code> et <code>essai-cuisson</code> ne touchent que le protocole
-        (les etapes 5 et 6). Les trois fusions sur <code>main</code> sont sequentielles, et le
-        dernier commit re-teste explicitement une combinaison que les fusions n'avaient fait
-        que juxtaposer.
-      </p>
-    </div>
-    <div class="graph-frame">
-      <div class="graph-inner">
-        {plot_html}
-      </div>
-      <div class="graph-legend">
-        <span class="legend-item good"><span class="legend-dot"></span>concluded &middot; promote</span>
-        <span class="legend-item explore"><span class="legend-dot"></span>concluded &middot; branch (exploration)</span>
-        <span class="legend-item bad"><span class="legend-dot"></span>abandoned</span>
-        <span class="legend-item neutral"><span class="legend-dot"></span>draft / running / inconclusive</span>
-      </div>
-    </div>
-  </section>"""
+    graph_section_html = graph_section(
+        repo,
+        heading="3 branches, 3 fusions, 1 validation",
+        description=(
+            "<code>essai-jaunes</code> ne touche que la structure (les jaunes d'oeufs) ; "
+            "<code>essai-repos</code> et <code>essai-cuisson</code> ne touchent que le protocole "
+            "(les etapes 5 et 6). Les trois fusions sur <code>main</code> sont sequentielles, et le "
+            "dernier commit re-teste explicitement une combinaison que les fusions n'avaient fait "
+            "que juxtaposer."
+        ),
+        legend=status_legend(neutral_label="draft / running / inconclusive"),
+        embed_plotly=embed_plotly,
+    )
 
     def branch_section(*, label, title, desc, exp_a, exp_b, headline_unit_a, headline_a, headline_unit_b, headline_b):
         return f"""  <section class="section">
@@ -433,7 +411,7 @@ def render(repo: Repository, *, embed_plotly: bool) -> str:
 )}
   </section>"""
 
-    footer = f"""<footer class="footer section">
+    footer = """<footer class="footer section">
     <div class="section-head">
       <div class="section-label">Reproduire</div>
       <h2 class="section-title">La recette optimale, en resume</h2>
@@ -478,24 +456,18 @@ def render(repo: Repository, *, embed_plotly: bool) -> str:
             "<b>4</b> branches",
             "<b>3</b> fusions + <b>1</b> validation",
         ],
-        sections=[sources_section, graph_section, jaunes_section, repos_section, cuisson_section, resolution_section, validation_section],
+        sections=[sources_section, graph_section_html, jaunes_section, repos_section, cuisson_section, resolution_section, validation_section],
         footer=footer,
     )
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--out", default="demos/output/chocolate_fondant.html")
-    parser.add_argument("--embed", action="store_true", help="embed plotly.js (~4.8MB, fully offline) instead of using the CDN")
-    args = parser.parse_args()
-
-    repo = build_repository()
-    html = render(repo, embed_plotly=args.embed)
-
-    out = Path(args.out)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(html, encoding="utf-8")
-    print(f"wrote {out} ({out.stat().st_size} bytes)")
+    run_demo(
+        doc=__doc__,
+        default_out="demos/output/chocolate_fondant.html",
+        build_repository=build_repository,
+        render=render,
+    )
 
 
 if __name__ == "__main__":

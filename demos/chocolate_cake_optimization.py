@@ -20,15 +20,14 @@ Run: python -m demos.chocolate_cake_optimization [--out demos/output/chocolate_c
 
 from __future__ import annotations
 
-import argparse
-from pathlib import Path
 
+from demos._main import run_demo
 from demos._report import batch_table, experiment_fiche, render_report
 from examples.chocolate_cake import CakeTrialBatch, ChocolateCake
 from follow import Quantity, Repository, analyze_batch
+from follow.report import graph_section
 from follow.commit_form import CommitForm
 from follow.design import check_identifiability, fractional_factorial, full_factorial, latin_hypercube, lin, sweep
-from follow.graphing import build_graph_figure
 
 COMMIT_FORM = CommitForm.model_validate(
     {
@@ -131,7 +130,7 @@ def build_repository() -> Repository:
     # the repository's history rather than silently vanishing. --------------------------------------
     naive_trials = [
         _baseline_recipe().model_copy(update={"trial_id": i + 1, "sugar": Quantity(value=s, unit="g"), "butter": Quantity(value=b, unit="g")})
-        for i, (s, b) in enumerate(zip([140, 160, 180, 200, 220], [110, 125, 140, 155, 170]))
+        for i, (s, b) in enumerate(zip([140, 160, 180, 200, 220], [110, 125, 140, 155, 170], strict=True))
     ]
     confounded = check_identifiability(naive_trials, ["sugar", "butter"])
     assert confounded and confounded[0][2] > 0.99, "the naive split is supposed to be a cautionary example of confounding"
@@ -316,31 +315,14 @@ def render(repo: Repository, *, embed_plotly: bool) -> str:
     merged = [e for e in repo if e.title == "Fusion : temperature + sucre/beurre optimaux"][0]
     final = repo.get("recette-optimale")
 
-    fig = build_graph_figure(repo)
-    plot_html = fig.to_html(
-        include_plotlyjs=True if embed_plotly else "cdn",
-        full_html=False,
-        div_id="follow-graph",
-        config={"displaylogo": False, "responsive": True, "modeBarButtonsToRemove": ["toImage"]},
+    graph_section_html = graph_section(
+        repo,
+        heading="10 commits, 4 strategies de split, 1 fusion, 1 validation",
+        description=(
+            "Un seul dépôt : un split manuel (<code>essai-temperature</code>), un split raté puis corrigé (<code>essai-sucre-beurre-naif</code> → <code>essai-sucre-beurre</code>), un plan fractionnaire (<code>essai-fractionnaire</code>) et un screening LHS (<code>essai-screening-lhs</code>) — puis une fusion qui combine les deux améliorations validées, et une validation finale."
+        ),
+        embed_plotly=embed_plotly,
     )
-    graph_section = f"""  <section class="section">
-    <div class="section-head">
-      <div class="section-label">Graphe de filiation</div>
-      <h2 class="section-title">10 commits, 4 strategies de split, 1 fusion, 1 validation</h2>
-      <p class="section-desc">
-        Un seul dépôt : un split manuel (<code>essai-temperature</code>), un split raté puis
-        corrigé (<code>essai-sucre-beurre-naif</code> → <code>essai-sucre-beurre</code>), un plan
-        fractionnaire (<code>essai-fractionnaire</code>) et un screening LHS
-        (<code>essai-screening-lhs</code>) — puis une fusion qui combine les deux améliorations
-        validées, et une validation finale.
-      </p>
-    </div>
-    <div class="graph-frame">
-      <div class="graph-inner">
-        {plot_html}
-      </div>
-    </div>
-  </section>"""
 
     baseline_section = f"""  <section class="section">
     <div class="section-head">
@@ -413,7 +395,7 @@ def render(repo: Repository, *, embed_plotly: bool) -> str:
         ),
     )
 
-    footer = f"""<footer class="footer section">
+    footer = """<footer class="footer section">
     <div class="section-head">
       <div class="section-label">Reproduire</div>
       <h2 class="section-title">La recette finale, en résumé</h2>
@@ -457,24 +439,18 @@ def render(repo: Repository, *, embed_plotly: bool) -> str:
             "<b>4</b> stratégies de split",
             "<b>1</b> fusion",
         ],
-        sections=[graph_section, baseline_section, temp_section, naive_section, sb_section, frac_section, lhs_section, merge_section, validation_section],
+        sections=[graph_section_html, baseline_section, temp_section, naive_section, sb_section, frac_section, lhs_section, merge_section, validation_section],
         footer=footer,
     )
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--out", default="demos/output/chocolate_cake_optimization.html")
-    parser.add_argument("--embed", action="store_true", help="embed plotly.js (~4.8MB, fully offline) instead of using the CDN")
-    args = parser.parse_args()
-
-    repo = build_repository()
-    html = render(repo, embed_plotly=args.embed)
-
-    out = Path(args.out)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(html, encoding="utf-8")
-    print(f"wrote {out} ({out.stat().st_size} bytes)")
+    run_demo(
+        doc=__doc__,
+        default_out="demos/output/chocolate_cake_optimization.html",
+        build_repository=build_repository,
+        render=render,
+    )
 
 
 if __name__ == "__main__":

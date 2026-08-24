@@ -22,7 +22,6 @@ import html as _html
 from typing import TYPE_CHECKING, Any, Sequence
 
 from .batch import BatchVariation
-from .diffing import StructureDiff
 from .formatting import format_value
 from .graphing import build_graph_figure
 from .merging import get_path, split_path
@@ -558,6 +557,7 @@ def experiment_fiche(
     parents: Sequence[tuple[str, str, str]] = (),
     parents_label: str = "Filiation",
     split: str = "",
+    extra_rows: str = "",
 ) -> str:
     """The complete, ergonomic fiche for one experiment, straight from its own fields, in one
     reading order: **résumé** (intention + hypothèse) → **objectifs** de l'étude → the split
@@ -569,6 +569,11 @@ def experiment_fiche(
     argument), this takes a real :class:`~follow.models.Experiment` and escapes its own text -
     the one-call entry point for rendering an experiment as-is. ``parents`` and ``badges_extra``
     work exactly like :func:`fiche_card`'s.
+
+    ``extra_rows`` is raw ``.fiche-row`` HTML appended inside the card, after the conclusion -
+    the slot :func:`render_study_html` uses for its lineage block. It exists because the caller
+    previously reached in and cut the closing ``</div>`` off the returned string to splice its
+    own rows in, which silently depended on this function's exact indentation.
     """
     badges = [experiment.conclusion.status]
     if experiment.conclusion.decision:
@@ -605,6 +610,7 @@ def experiment_fiche(
     ]
     body = "\n".join(part for part in body_parts if part)
 
+    extra_rows_html = f"\n{extra_rows}" if extra_rows else ""
     conclusion_text = _esc(experiment.conclusion.summary) if experiment.conclusion.summary else "—"
     next_steps_html = ""
     if experiment.conclusion.next_steps:
@@ -635,8 +641,60 @@ def experiment_fiche(
       <div class="fiche-row">
         <div class="fiche-label">Conclusion</div>
         <p class="fiche-text">{conclusion_text}</p>
-      </div>{next_steps_html}
+      </div>{next_steps_html}{extra_rows_html}
     </div>"""
+
+
+def status_legend(*, neutral_label: str = "draft / running") -> str:
+    """The colour key for :func:`graph_section`'s node statuses, matching
+    :data:`follow.graphing._STATUS_COLORS`. ``neutral_label`` is the only part demos ever varied.
+    """
+    return f"""      <div class="graph-legend">
+        <span class="legend-item good"><span class="legend-dot"></span>concluded &middot; promote</span>
+        <span class="legend-item explore"><span class="legend-dot"></span>concluded &middot; branch (exploration)</span>
+        <span class="legend-item bad"><span class="legend-dot"></span>abandoned</span>
+        <span class="legend-item neutral"><span class="legend-dot"></span>{neutral_label}</span>
+      </div>"""
+
+
+def graph_section(
+    repo: "Repository",
+    *,
+    heading: str,
+    description: str = "",
+    embed_plotly: bool = True,
+    label: str = "Graphe de filiation",
+    div_id: str = "follow-graph",
+    legend: str = "",
+) -> str:
+    """The lineage graph as a ready-to-drop ``<section>``: Plotly figure, framing and caption.
+
+    Every demo built this block by hand and :func:`render_study_html` had a sixth copy - the same
+    ``fig.to_html`` call down to ``modeBarButtonsToRemove``, wrapped in the same
+    ``.graph-frame``/``.graph-inner`` markup. Only ``heading`` and ``description`` ever differed,
+    so those are the arguments; both are inserted as raw HTML (callers compose ``<code>`` into
+    them), like :func:`render_page`'s own flow slots. Pass ``legend=status_legend()`` to add
+    the colour key under the figure.
+    """
+    plot_html = build_graph_figure(repo).to_html(
+        include_plotlyjs=True if embed_plotly else "cdn",
+        full_html=False,
+        div_id=div_id,
+        config={"displaylogo": False, "responsive": True, "modeBarButtonsToRemove": ["toImage"]},
+    )
+    caption = f'\n      <p class="section-desc">{description}</p>' if description else ""
+    legend_html = f"\n{legend}" if legend else ""
+    return f"""  <section class="section">
+    <div class="section-head">
+      <div class="section-label">{label}</div>
+      <h2 class="section-title">{heading}</h2>{caption}
+    </div>
+    <div class="graph-frame">
+      <div class="graph-inner">
+        {plot_html}
+      </div>{legend_html}
+    </div>
+  </section>"""
 
 
 def render_page(
@@ -811,10 +869,9 @@ def _experiment_section(repo: "Repository", exp: Experiment, index: int, total: 
     ]
     parents_label = "Filiation (fusion)" if len(exp.parents) == 2 else "Filiation"
 
-    card = experiment_fiche(exp, parents=parents, parents_label=parents_label)
-    lineage = _lineage_html(repo, exp)
-    if lineage:
-        card = card[: -len("\n    </div>")] + "\n" + lineage + "\n    </div>"
+    card = experiment_fiche(
+        exp, parents=parents, parents_label=parents_label, extra_rows=_lineage_html(repo, exp)
+    )
 
     return f"""  <section class="section" id="{_esc(exp.id)}">
     <div class="section-head">
@@ -880,24 +937,7 @@ def render_study_html(
 
     graph_html = ""
     try:
-        fig = build_graph_figure(repo)
-        plot_html = fig.to_html(
-            include_plotlyjs=True if embed_plotly else "cdn",
-            full_html=False,
-            div_id="follow-graph",
-            config={"displaylogo": False, "responsive": True, "modeBarButtonsToRemove": ["toImage"]},
-        )
-        graph_html = f"""  <section class="section">
-    <div class="section-head">
-      <div class="section-label">Graphe de filiation</div>
-      <h2 class="section-title">follow graph</h2>
-    </div>
-    <div class="graph-frame">
-      <div class="graph-inner">
-        {plot_html}
-      </div>
-    </div>
-  </section>"""
+        graph_html = graph_section(repo, heading="follow graph", embed_plotly=embed_plotly)
     except FollowError:
         # a corrupt lineage (a cycle) is a problem with the repository's data, not with drawing
         # it - silently dropping the figure would hide the one thing the reader needs to know

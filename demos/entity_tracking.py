@@ -9,13 +9,12 @@ Run: python -m demos.entity_tracking [--out demos/output/entity_tracking.html] [
 
 from __future__ import annotations
 
-import argparse
-from pathlib import Path
 
+from demos._main import run_demo
 from demos._report import batch_table, experiment_fiche, render_report
 from examples.chocolate_cake import CakeTrialBatch, ChocolateCake
 from follow import Quantity, Repository, analyze_batch
-from follow.graphing import build_graph_figure
+from follow.report import graph_section
 
 
 def _baseline_recipe() -> ChocolateCake:
@@ -105,30 +104,14 @@ def render(repo: Repository, *, embed_plotly: bool) -> str:
     nutella = repo.get("moule-vert-nutella")
     glacage = repo.get("moule-rouge-glacage")
 
-    fig = build_graph_figure(repo)
-    plot_html = fig.to_html(
-        include_plotlyjs=True if embed_plotly else "cdn",
-        full_html=False,
-        div_id="follow-graph",
-        config={"displaylogo": False, "responsive": True, "modeBarButtonsToRemove": ["toImage"]},
+    graph_section_html = graph_section(
+        repo,
+        heading="3 expériences, 3 branches, aucune arête entre elles",
+        description=(
+            "<code>moule-vert-nutella</code> et <code>moule-rouge-glacage</code> n'ont ni parent ni référence vers <code>main</code> — le graphe git-like ne montre donc aucun lien. C'est exactement le cas que <code>find_entity</code> couvre : deux commits physiquement liés (même moule) mais sans aucune parenté à suivre."
+        ),
+        embed_plotly=embed_plotly,
     )
-    graph_section = f"""  <section class="section">
-    <div class="section-head">
-      <div class="section-label">Graphe de filiation</div>
-      <h2 class="section-title">3 expériences, 3 branches, aucune arête entre elles</h2>
-      <p class="section-desc">
-        <code>moule-vert-nutella</code> et <code>moule-rouge-glacage</code> n'ont ni parent ni
-        référence vers <code>main</code> — le graphe git-like ne montre donc aucun lien. C'est
-        exactement le cas que <code>find_entity</code> couvre : deux commits physiquement liés
-        (même moule) mais sans aucune parenté à suivre.
-      </p>
-    </div>
-    <div class="graph-frame">
-      <div class="graph-inner">
-        {plot_html}
-      </div>
-    </div>
-  </section>"""
 
     structure = repo.load_structure(split)
     variation = analyze_batch(structure.trials, ignore=["trial_id"])
@@ -184,7 +167,7 @@ def render(repo: Repository, *, embed_plotly: bool) -> str:
     </div>
   </section>"""
 
-    footer = f"""<footer class="footer section">
+    footer = """<footer class="footer section">
     <div class="section-head">
       <div class="section-label">Reproduire</div>
       <h2 class="section-title">La même idée, en résumé</h2>
@@ -225,24 +208,18 @@ def render(repo: Repository, *, embed_plotly: bool) -> str:
             "<b>0</b> lien de filiation entre elles",
             "<b>2</b> entités suivies",
         ],
-        sections=[graph_section, split_section, followup_section, trace_section],
+        sections=[graph_section_html, split_section, followup_section, trace_section],
         footer=footer,
     )
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--out", default="demos/output/entity_tracking.html")
-    parser.add_argument("--embed", action="store_true", help="embed plotly.js (~4.8MB, fully offline) instead of using the CDN")
-    args = parser.parse_args()
-
-    repo = build_repository()
-    html = render(repo, embed_plotly=args.embed)
-
-    out = Path(args.out)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(html, encoding="utf-8")
-    print(f"wrote {out} ({out.stat().st_size} bytes)")
+    run_demo(
+        doc=__doc__,
+        default_out="demos/output/entity_tracking.html",
+        build_repository=build_repository,
+        render=render,
+    )
 
 
 if __name__ == "__main__":
