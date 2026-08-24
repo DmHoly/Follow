@@ -1,0 +1,43 @@
+# Commit form for a wafer-fab repository. Drop this file (renamed to `commit_form.yml`) into a
+# Repository's directory and Follow requires every commit to answer it - see docs/commit_form.rst
+# and follow/commit_form.py.
+title: Formulaire de commit - Fab wafers
+description: >
+  Métadonnées obligatoires pour chaque expérience de fabrication, au-delà de ce que la Structure
+  capture déjà (dose, température...) - qui, sur quel run, et si le plan a été vérifié.
+
+fields:
+  - name: operator
+    label: Opérateur
+    type: string
+    required: true
+
+  - name: fab_run_id
+    label: Identifiant du run fab
+    type: string
+    required: true
+
+  - name: design_type
+    label: Type de plan d'expérience
+    type: choice
+    choices: [full_factorial, fractional_factorial, sweep, latin_hypercube, autre]
+    required: true
+    help: Comment ce split a été généré (voir follow.design) - pas obligatoire de coder à la main.
+
+  - name: checked_confounding
+    label: Facteurs croisés vérifiés (aucune paire fortement corrélée) ?
+    type: boolean
+    required: true
+    help: >
+      A-t-on fait tourner follow.design.check_identifiability (ou lu l'alias_structure d'un plan
+      fractionnaire) avant de lancer le run ? Répondre non est autorisé, mais doit être explicite.
+
+  - name: reviewed_by
+    label: Relu par
+    type: string
+    required: false
+
+  - name: notes
+    label: Notes libres
+    type: text
+    required: false

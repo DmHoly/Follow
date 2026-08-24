@@ -15,6 +15,83 @@ vérifier/tracer le raisonnement qui en découle (objectif → preuve → conclu
 point d'ancrage prévu pour une couche d'inférence causale/corrélative (ex. DoWhy) dans une
 itération future — non incluse dans ce périmètre v1 "cœur".
 
+Documentation complète (guide, référence de l'API, CLI) : voir `docs/` (`make html` avec Sphinx,
+détails plus bas) ou `demos/` pour des scénarios complets exécutables.
+
+## Installation
+
+```bash
+# depuis PyPI, une fois publié (pas encore le cas)
+pip install follow
+
+# depuis ce dépôt Git, dès maintenant
+pip install git+https://github.com/DmHoly/Follow.git
+
+# en local, pour développer (avec les tests et la doc)
+git clone https://github.com/DmHoly/Follow.git && cd Follow
+pip install -e ".[dev,docs]"
+```
+
+Python ≥ 3.11 requis. Dépendances : `pydantic` (les modèles), `plotly` (le graphe de filiation),
+`numpy` (générateurs de plan d'expériences, `follow.design`) et `pyyaml` (formulaires de commit,
+`follow.commit_form`) — pas de Graphviz, pas de base de données, pas de moteur de template. Extras
+optionnels : `.[dev]` (tests), `.[docs]` (Sphinx), `.[menu]` (`questionary`, pour `follow menu`).
+
+```python
+>>> import follow
+>>> follow.__version__
+'0.1.0'
+```
+
+## Démarrage rapide
+
+```python
+from follow import Quantity, Repository, Structure
+
+class CakeRecipe(Structure):
+    ingredients: dict[str, Quantity]
+
+repo = Repository()  # ou Repository("./mon_labo") pour persister sur disque
+
+baseline = (
+    repo.new(
+        branch="main",
+        structure=CakeRecipe(ingredients={"farine": Quantity(value=200, unit="g")}),
+        title="Référence",
+        intent="Établir une base de comparaison",
+    )
+    .conclude(status="concluded", decision="promote", summary="Recette de départ.")
+    .commit()
+)
+
+variant = repo.derive(baseline.id, title="Plus de farine", intent="Plus de farine améliore-t-elle la levée ?")
+variant.structure.ingredients["farine"] = Quantity(value=240, unit="g")
+variant.conclude(summary="Légère amélioration.", decision="promote")
+committed = variant.commit()
+
+for entry in repo.diff(baseline.id, committed.id):
+    print(entry)   # ~ ingredients.farine: 200 g -> 240 g
+```
+
+Équivalent en ligne de commande :
+
+```bash
+follow init mon_labo
+follow new --repo mon_labo --branch main --title Référence --intent "Établir une base" \
+  --structure-type mon_module.CakeRecipe --structure-file cake.json --out draft.json
+follow commit draft.json --repo mon_labo
+follow log main --repo mon_labo
+follow report --repo mon_labo --out etude.html   # la fiche complète, générée automatiquement
+```
+
+La suite de ce README détaille chaque concept ; `docs/quickstart.rst` reprend cet exemple pas à
+pas avec plus de contexte, et **`docs/tutorial.rst` est le guide complet** : déclarer une
+expérience (intention, structure, référence, objectifs), démarrer un split manuel puis plusieurs
+types de DOE (factoriel, fractionnaire, screening), détecter un plan mal construit avant de lui
+faire confiance, fusionner deux améliorations validées séparément, exiger un formulaire de
+commit, et valider avant de conclure — le tout sur une recette de gâteau au chocolat optimisée de
+bout en bout (`demos/chocolate_cake_optimization.py`).
+
 ## Concepts
 
 | Concept | Rôle | Équivalent git |
@@ -57,9 +134,14 @@ class FinFETStructure(MOSFETStructure):
     fin_width: Quantity
 ```
 
-Voir `examples/` pour trois domaines complets : `recipe.py` (recette de gâteau, avec variante
-par héritage), `mosfet.py` (MOSFET → FinFET), `solar_cell.py` (composition profonde
-module → cellule → jonction PN → couche).
+Voir `examples/` pour les domaines complets : `recipe.py` (recette de gâteau, avec variante par
+héritage), `mosfet.py` (MOSFET → FinFET), `solar_cell.py` (composition profonde
+module → cellule → jonction PN → couche), `chocolate_fondant.py` (optimisation d'une recette de
+fondant au chocolat cœur coulant à partir de recettes réelles), `wafer_doe.py` (le cas d'école
+DOE : un lot d'entités suivi comme une seule expérience), `chocolate_cake.py` (champs plats,
+pensés pour `follow.design` — voir `docs/tutorial.rst`).
+
+Voir `demos/` pour des scénarios complets, bout en bout, rendus en pages HTML autonomes.
 
 ## Workflow
 
@@ -97,13 +179,281 @@ print(render_fiche(committed, repo))       # la "fiche" façon git show
 print(repo.diff(baseline.id, committed.id))  # uniquement les paramètres qui ont varié
 ```
 
-`repo.log("main")`, `repo.branch(...)`, `repo.tag(...)` et `render_dot(repo)` (export Graphviz du
-graphe de filiation complet) complètent l'API — voir les docstrings de `follow/repository.py` et
-`follow/rendering.py`.
+`repo.log("main")`, `repo.branch(...)`, `repo.tag(...)` et `render_graph_html(repo, "graph.html")`
+(graphe de filiation interactif, voir plus bas) complètent l'API — voir les docstrings de
+`follow/repository.py` et `follow/rendering.py`.
+
+## CLI façon git
+
+Après `pip install -e .`, la commande `follow` est disponible. Le principe suit celui de git :
+un brouillon JSON joue le rôle de l'arbre de travail (on l'édite à la main — ajout d'étapes, de
+preuves, écriture de la conclusion une fois l'expérience réellement menée), puis `follow commit`
+le fige dans le dépôt.
+
+```bash
+follow init mon_labo
+
+follow new --repo mon_labo \
+  --branch main --title Baseline --intent "Établir une référence" \
+  --structure-type examples.recipe.CakeRecipe --structure-file cake.json \
+  --out draft.json
+# éditer draft.json à la main si besoin (étapes, objectifs, preuves...)
+follow commit draft.json --repo mon_labo
+# -> exp_xxxxxxxx  (main)  Baseline
+
+follow derive exp_xxxxxxxx --repo mon_labo \
+  --title "Plus de farine" --intent "Plus de farine améliore-t-elle la levée ?" \
+  --out variant.json
+# variant.json hérite la structure + une référence "baseline" automatique vers le parent
+# -> éditer variant.json : changer la farine, ajouter evidence + conclusion
+follow commit variant.json --repo mon_labo
+
+follow log main --repo mon_labo          # historique de la branche
+follow show exp_yyyyyyyy --repo mon_labo # la fiche complète (façon `git show`)
+follow diff exp_xxxxxxxx exp_yyyyyyyy --repo mon_labo          # ce qui a varié dans la structure
+follow diff exp_xxxxxxxx exp_yyyyyyyy --repo mon_labo --steps  # ce qui a varié dans le protocole
+follow branch --repo mon_labo            # lister les branches
+follow branch essai --at exp_yyyyyyyy --repo mon_labo  # créer/déplacer une branche
+follow tag championne --at exp_yyyyyyyy --repo mon_labo
+follow graph --repo mon_labo --out graph.html --open
+```
+
+`--structure-type` attend un chemin pointé Python (`module.Classe`) : la CLI importe ce module à
+la volée pour retrouver la classe `Structure` enregistrée, donc vos domaines (`examples/recipe.py`
+et consorts) doivent être importables (présents dans le répertoire courant ou installés).
+
+`follow --help` / `follow <sous-commande> --help` détaille chaque option.
+
+### Menu interactif (`follow menu`)
+
+Naviguer, démarrer une expérience, en dériver une variante, clôturer un brouillon (conclure +
+committer), fusionner deux branches, générer un rapport ou le graphe — sans mémoriser les
+sous-commandes ci-dessus. Chaque action appelle exactement la même API
+(`Repository`/`ExperimentBuilder`) ; rien n'est réimplémenté, seule la navigation change.
+
+```bash
+pip install "follow[menu]"   # ajoute questionary, non installé par défaut
+follow menu --repo mon_labo
+```
+
+L'authoring de la `Structure` elle-même n'est pas réinventé : comme `--structure-file`, le menu
+pointe vers un fichier JSON existant plutôt que de tenter de générer un formulaire pour une forme
+Pydantic arbitraire. Les invites interactives portent sur ce qui a une forme fixe et connue
+(objectifs, preuves, conclusion) et sur la navigation (choisir une expérience, une branche, les
+chemins à prendre lors d'une fusion — dans une vraie liste plutôt qu'en recopiant des
+identifiants à la main). Voir `docs/cli.rst`.
+
+## Fusionner deux lignes de travail (`follow merge`)
+
+Une expérience peut avoir **deux parents** — c'est un commit de fusion, comme dans git. Vous
+testez une variation sur une branche à part, puis vous rapatriez dans `main` uniquement ce qui a
+été validé : Follow ne résout jamais un conflit tout seul, vous choisissez explicitement, chemin
+par chemin, quelle valeur garder.
+
+```bash
+# `essai-cuisson` a divergé de `main` puis évolué sur 3 commits (160°C, 185°C, 175°C retenu)
+follow diff main essai-cuisson --repo mon_labo --steps
+# ~ [2].parameters.temperature: 170 C -> 175 C
+# ~ [2].parameters.duree: 35 min -> 32 min
+
+follow merge main essai-cuisson --repo mon_labo \
+  --title "Fusion : cuisson optimisée" \
+  --intent "N'adopter que la température de cuisson validée sur la branche d'essai" \
+  --take-steps "[2]" \
+  --out merge.json
+# merge.json : parents = [tip(main), tip(essai-cuisson)], step [2] vient de la branche,
+# toutes les autres étapes (y compris les changements propres à main) restent inchangées
+follow commit merge.json --repo mon_labo
+```
+
+`--take-structure PATH` fait la même chose pour la `Structure` (les chemins viennent de
+`follow diff`, sans `--steps`) ; `--take-steps PATH` cible le protocole (chemins de
+`follow diff --steps`, ex. `[2]` pour toute l'étape, `[2].parameters.temperature` pour un seul
+champ). Tout chemin non listé garde la valeur du premier réf (`ref_a`, la cible de la fusion) —
+exactement comme un hunk de `git merge` qu'on ne touche pas. Voir `Repository.merge` et
+`resolve_merge_paths` (`follow/merging.py`) côté Python.
+
+## Une expérience, N variantes (`follow explode`)
+
+Cas hors de portée de git : un plan d'expériences (DOE) factoriel réparti sur 25 wafers (ou 25
+moules de recette, 25 formes de lentille...) reste **une seule expérience** — une intention, un
+protocole, une conclusion — mais sa `Structure` contient une liste de 25 entités qui ont chacune
+reçu une combinaison différente de paramètres. `follow.batch.analyze_batch` sépare
+mécaniquement ce qui est constant sur toutes les entités de ce qui varie réellement (les
+facteurs du plan) ; `follow.report.batch_table` l'affiche comme un bloc « explosé » à poser à
+côté de la fiche habituelle de l'expérience — un affichage hybride, par expérience et par
+entité.
+
+```bash
+follow explode main wafers --ignore slot --repo mon_labo
+# 25 entités  ·  1 constant(s)  ·  2 variable(s)
+#
+# constants:
+#   anneal_duration: 30 min
+#
+# variables:
+#   implant_dose: [2 1e14 cm^-2, 2 1e14 cm^-2, ..., 10 1e14 cm^-2]
+#   anneal_temperature: [900 C, 950 C, ..., 1100 C]
+
+follow explode main wafers --ignore slot --repo mon_labo --out explode.html --open
+```
+
+`--ignore` exclut les champs d'identité (un numéro de slot, un id de série) qui diffèrent par
+construction sur chaque entité et empêcheraient sinon un lot réellement homogène (ex. un lot de
+confirmation) de ressortir comme uniforme. Voir `demos/wafer_doe.py` (plan factoriel 5×5 sur 25
+wafers, puis lot de confirmation) et `docs/batch.rst` côté Python.
+
+## Générer le split lui-même (`follow.design`)
+
+Pas besoin de recopier une structure de référence à la main pour chaque variante :
+`follow.design` prend une instance de référence déjà valide et un spec par facteur, et renvoie
+la liste de variantes.
+
+```python
+from follow.design import full_factorial, lin
+
+wafers = full_factorial(
+    reference,                                            # un Wafer déjà valide
+    id_field="slot",
+    implant_dose=lin(2, 10, 5, unit="1e14 cm^-2"),        # numpy.linspace, 5 valeurs
+    anneal_temperature=lin(900, 1100, 5, unit="C"),
+)  # 25 Wafer, slot numéroté 1..25 automatiquement
+```
+
+Trois générateurs de plan : `sweep` (un seul facteur varie — toujours identifiable),
+`full_factorial` (toutes les combinaisons — toujours identifiable), `latin_hypercube` (balayage
+aléatoire stratifié, pour un screening). `fractional_factorial` réduit le nombre de runs d'un
+plan à deux niveaux en dérivant certains facteurs comme produit d'autres, et calcule
+explicitement la **structure d'aliasing** qui en résulte (`result.resolution`,
+`result.aliases`) — pas de mauvaise surprise après coup sur ce qui est confondu avec quoi.
+
+Et pour l'erreur classique faite à la main — deux facteurs qu'on fait varier ensemble au lieu de
+les croiser, rendant leurs effets impossibles à séparer statistiquement —
+`check_identifiability` vérifie la corrélation entre chaque paire de facteurs sur le plan
+effectivement construit :
+
+```python
+from follow.design import check_identifiability
+
+check_identifiability(bad_split, ["implant_dose", "anneal_temperature"])
+# [("implant_dose", "anneal_temperature", 0.999...)]  <- confondus, à corriger
+```
+
+Voir `docs/design.rst`.
+
+## Formulaire de commit obligatoire
+
+Une `Structure` capture la configuration étudiée, mais pas certaines métadonnées qu'on veut
+tracer systématiquement (qui a lancé le run, si un plan croisé a été vérifié pour l'aliasing...).
+`follow.commit_form` définit ce questionnaire une fois, en YAML, et le rend **obligatoire** à
+chaque commit d'un dépôt donné :
+
+```yaml
+# commit_form.yml, déposé dans le dossier du dépôt - chargé automatiquement
+title: Formulaire de commit - Fab wafers
+fields:
+  - name: operator
+    label: Opérateur
+    type: string
+    required: true
+  - name: checked_confounding
+    label: Facteurs croisés vérifiés ?
+    type: boolean
+    required: true
+```
+
+```python
+repo = Repository("mon_labo")   # charge mon_labo/commit_form.yml s'il existe
+
+builder = repo.new(branch="main", structure=lot, title="LOT-A", intent="...")
+builder.answer_form(operator="Alice", checked_confounding=True)
+builder.commit()   # lève FormValidationError (liste tous les problèmes) si une réponse manque/est invalide
+```
+
+Un dépôt sans formulaire configuré n'exige rien. `follow new`/`derive`/`merge` affichent les
+champs requis dès l'écriture du brouillon quand un formulaire est configuré ; les réponses se
+remplissent dans la clé `form_answers` du brouillon avant `follow commit`. Les types de champ
+(`string`, `text`, `number`, `boolean`, `choice`) sont pensés pour piloter, plus tard, un vrai
+formulaire d'interface plutôt que seulement valider du texte. Voir
+`examples/wafer_doe_commit_form.yml` et `docs/commit_form.rst`.
+
+## Générer une fiche/compte rendu d'étude (`follow report`)
+
+`follow report` transforme un dépôt (ou le lignage d'une branche) en une page HTML autonome,
+lisible comme le compte rendu d'une étude complète — sans IA, sans moteur de template externe :
+tout vient des champs déjà présents dans les expériences (`follow/report.py`, pure f-strings
+Python, zéro nouvelle dépendance au-delà de Plotly déjà utilisé par `follow graph`).
+
+```bash
+follow report --repo mon_labo --title "Étude gâteau au yaourt" --out etude.html
+follow report essai-cuisson --repo mon_labo --out etude-branche.html  # limiter à une branche
+```
+
+La page contient : un sommaire cliquable, le graphe de filiation, puis une fiche par expérience —
+`follow.report.experiment_fiche`, lue dans un seul ordre : **résumé** (intention + hypothèse) →
+**objectifs de l'étude** → **résultats & preuves** → **conclusion** (décision, résumé, et la
+suite). Pour chaque commit, ce qui a changé est calculé — pas recopié à la main :
+
+- **un seul parent** → diff structure + protocole contre ce parent (`repo.diff`/`diff_steps`) ;
+- **deux parents** (fusion) → chaque chemin qui diffère entre les deux parents est comparé à la
+  valeur du commit de fusion pour dire explicitement de quel côté elle a été reprise
+  (« valeur conservée du premier parent » / « valeur reprise du second parent »), au niveau de
+  chaque feuille — plus précis qu'une note écrite à la main.
+
+Follow n'analyse jamais rien lui-même : le tableau résultats/preuves relie chaque verdict
+d'objectif à l'`Evidence` exacte qui le justifie (`evidence_ids`), avec un lien cliquable vers sa
+source — un fichier de mesures brutes, ou un notebook Jupyter qui a fait l'analyse statistique
+ailleurs. `Conclusion.next_steps` (texte libre) capture la suite, distincte de `decision`
+(promote/branch/replicate/abandon/inconclusive, catégoriel).
+
+Le texte issu du dépôt (titres, intentions, résumés...) est échappé avant insertion dans le
+HTML. `render_study_html(repo, ...)` est l'équivalent Python direct ; les briques visuelles
+(`experiment_fiche`, `objectives_table`, `results_table`, `fiche_card`, `trial_card`,
+`resolution_conflict_row`...) sont réutilisables pour composer un rapport sur mesure — voir
+`demos/` pour des exemples qui les assemblent à la main plutôt que de laisser `follow report` tout
+dériver automatiquement.
+
+## Graphe de filiation
+
+`follow graph` (ou `render_graph_html`/`build_graph_figure` en Python) exporte le graphe complet
+en un unique fichier HTML autonome via **Plotly** — pas de Graphviz, pas de binaire système à
+installer. La mise en page est une simple disposition en couches (une rangée par génération,
+un nœud positionné par la moyenne des positions de ses parents) : suffisante pour lire la
+filiation et les embranchements sans dépendre d'un moteur de layout externe. Les nœuds sont
+colorés par statut de conclusion (`draft`/`running`/`concluded`/`abandoned`) et chaque pointe de
+branche est étiquetée.
 
 ## Développer
 
 ```bash
-uv pip install -e ".[dev]"
+pip install -e ".[dev]"
 pytest
+pytest --cov=follow --cov-report=term-missing   # couverture
 ```
+
+## Documentation (Sphinx)
+
+Guide complet, référence de l'API (autodoc à partir des docstrings) et référence CLI dans
+`docs/` :
+
+```bash
+pip install -e ".[docs]"
+sphinx-build -b html docs docs/_build/html   # ou : cd docs && make html
+```
+
+Ouvrir `docs/_build/html/index.html`. Le contenu source (`docs/*.rst`) est versionné ; le rendu
+HTML (`docs/_build/`) ne l'est pas — il se régénère à la demande.
+
+## Publier une nouvelle version
+
+Le numéro de version vit à un seul endroit : `__version__` dans `follow/__init__.py`
+(`pyproject.toml` le lit dynamiquement via `[tool.hatch.version]`). Pour publier :
+
+```bash
+# 1. mettre à jour follow/__init__.py : __version__ = "x.y.z"
+python -m build            # construit dist/*.whl et dist/*.tar.gz (pip install build)
+python -m twine upload dist/*   # vers PyPI, si/quand le paquet y est publié
+```
+
+Ce dépôt n'est pas encore publié sur PyPI — `pip install git+https://github.com/DmHoly/Follow.git`
+reste la façon d'installer une version précise sans attendre une publication.

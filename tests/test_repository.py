@@ -89,3 +89,48 @@ def test_persistence_round_trips_through_json_files(tmp_path):
     assert len(reloaded) == 2
     assert reloaded.get("main").title == "v2"
     assert [e.id for e in reloaded.log("main")] == [e.id for e in repo.log("main")]
+
+
+def test_contains_operator():
+    repo = Repository()
+    v1 = repo.new(branch="main", structure=_cake(200), title="v1", intent="start").commit()
+
+    assert v1.id in repo
+    assert "main" in repo
+    assert "does-not-exist" not in repo
+
+
+def test_diff_from_baseline_on_the_builder_before_commit():
+    repo = Repository()
+    v1 = repo.new(branch="main", structure=_cake(200), title="v1", intent="start").commit()
+
+    root_builder = repo.new(branch="side", structure=_cake(200), title="root", intent="no baseline")
+    assert root_builder.diff_from_baseline() is None
+
+    variant = repo.derive(v1.id, title="v2", intent="more flour")
+    variant.structure.ingredients["flour"] = Quantity(value=240, unit="g")
+    diff = variant.diff_from_baseline()
+    assert diff is not None
+    assert diff.changed_paths == ["ingredients.flour"]
+
+
+def test_branch_and_tag_persist_to_disk_when_called_directly(tmp_path):
+    repo = Repository(tmp_path)
+    v1 = repo.new(branch="main", structure=_cake(200), title="v1", intent="start").commit()
+    v2 = repo.derive(v1.id, title="v2", intent="tweak").commit()
+
+    repo.branch("stable", v1.id)
+    repo.tag("first-release", v1.id)
+
+    reloaded = Repository(tmp_path)
+    assert reloaded.branches["stable"] == v1.id
+    assert reloaded.tags["first-release"] == v1.id
+    assert reloaded.branches["main"] == v2.id
+
+
+def test_tags_passed_at_commit_time_are_applied():
+    repo = Repository()
+    v1 = repo.new(branch="main", structure=_cake(200), title="v1", intent="start", tags=["milestone"]).commit()
+
+    assert repo.tags["milestone"] == v1.id
+    assert repo.get("milestone").id == v1.id

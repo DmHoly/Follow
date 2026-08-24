@@ -124,6 +124,8 @@ def render_fiche(experiment: Experiment, repo: "Repository") -> str:
                 lines.append(f"  → **{result.status}**{observed}")
                 if result.reasoning:
                     lines.append(f"  {result.reasoning}")
+                if result.evidence_ids:
+                    lines.append(f"  preuve(s): {', '.join(f'`{eid}`' for eid in result.evidence_ids)}")
         lines.append("")
 
     if experiment.evidence:
@@ -143,6 +145,9 @@ def render_fiche(experiment: Experiment, repo: "Repository") -> str:
     if experiment.conclusion.summary:
         lines.append("")
         lines.append(experiment.conclusion.summary)
+    if experiment.conclusion.next_steps:
+        lines.append("")
+        lines.append(f"**Suite** : {experiment.conclusion.next_steps}")
     lines.append("")
 
     return "\n".join(lines)
@@ -156,17 +161,3 @@ def render_log(repo: "Repository", ref: str) -> str:
     return "\n".join(lines)
 
 
-def render_dot(repo: "Repository") -> str:
-    """The full experiment graph (lineage + branch tips) as Graphviz DOT source."""
-    lines = ["digraph follow {", '  rankdir="BT";', "  node [shape=box, fontname=\"monospace\"];"]
-    for exp in repo:
-        label = f"{exp.title}\\n{exp.id}".replace('"', '\\"')
-        lines.append(f'  "{exp.id}" [label="{label}"];')
-        for parent in exp.parents:
-            lines.append(f'  "{exp.id}" -> "{parent}";')
-    for name, exp_id in repo.branches.items():
-        node = f"branch:{name}"
-        lines.append(f'  "{node}" [shape=note, style=filled, fillcolor=lightyellow, label="{name}"];')
-        lines.append(f'  "{node}" -> "{exp_id}" [style=dashed];')
-    lines.append("}")
-    return "\n".join(lines)

@@ -1,5 +1,5 @@
 from examples.recipe import BakeStep, CakeRecipe
-from follow import Quantity, Repository, render_dot, render_fiche, render_log
+from follow import Quantity, Repository, render_fiche, render_log
 
 
 def _cake(flour_g: float) -> CakeRecipe:
@@ -45,6 +45,24 @@ def test_fiche_surfaces_the_diff_against_the_baseline():
     assert baseline_id in fiche
 
 
+def test_fiche_shows_next_steps_and_the_evidence_backing_each_objective_result():
+    repo = Repository()
+    builder = repo.new(branch="main", structure=_cake(200), title="Baseline", intent="Reference bake")
+    builder.add_objective(name="rise", metric="height_cm", direction="maximize", target=5.0)
+    builder.add_evidence(id="ev1", description="Oven log photo", source="file:///data/log.jpg")
+    builder.conclude(
+        summary="Rose as expected.",
+        decision="promote",
+        next_steps="Scale up to a full batch.",
+        objective_results=[dict(objective="rise", status="met", observed=Quantity(value=5.2, unit="cm"), evidence_ids=["ev1"])],
+    )
+    exp = builder.commit()
+
+    fiche = render_fiche(exp, repo)
+    assert "Scale up to a full batch." in fiche
+    assert "`ev1`" in fiche
+
+
 def test_render_log_lists_history_oldest_last():
     repo, baseline_id, variant_id = _repo_with_history()
     log_text = render_log(repo, "main")
@@ -52,11 +70,3 @@ def test_render_log_lists_history_oldest_last():
     assert lines[0].startswith(variant_id)
     assert lines[1].startswith(baseline_id)
 
-
-def test_render_dot_includes_nodes_and_branch_pointer():
-    repo, baseline_id, variant_id = _repo_with_history()
-    dot = render_dot(repo)
-    assert dot.startswith("digraph follow {")
-    assert baseline_id in dot
-    assert variant_id in dot
-    assert "branch:main" in dot

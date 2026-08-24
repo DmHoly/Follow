@@ -1,0 +1,361 @@
+<title>Fusion sélective</title>
+<meta name="description" content="Démo Follow : une branche d'essai à 3 commits, fusionnée dans main en ne reprenant qu'une seule étape sur cinq, avec résolution de conflit explicite." />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Public+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #F2F4EE;
+  --surface: #FFFFFF;
+  --surface-2: #E9EBE1;
+  --ink: #1B231D;
+  --ink-soft: #57604F;
+  --ink-faint: #838C7C;
+  --border: #D9DCCE;
+  --accent: #B8791E;
+  --accent-ink: #7A5416;
+  --status-good: #2F7D4F;
+  --status-explore: #2E6FA6;
+  --status-bad: #B23B3B;
+  --status-neutral: #8A8F80;
+  --shadow: 0 1px 2px rgba(27,35,29,.04), 0 8px 24px -12px rgba(27,35,29,.12);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14181A; --surface: #1C2220; --surface-2: #262D29;
+    --ink: #ECEFE6; --ink-soft: #A9B2A0; --ink-faint: #74806E; --border: #333D35;
+    --accent: #E3A34E; --accent-ink: #EFC186;
+    --status-good: #57B583; --status-explore: #6FA9D6; --status-bad: #E27E7E; --status-neutral: #9AA398;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 28px -14px rgba(0,0,0,.55);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14181A; --surface: #1C2220; --surface-2: #262D29;
+  --ink: #ECEFE6; --ink-soft: #A9B2A0; --ink-faint: #74806E; --border: #333D35;
+  --accent: #E3A34E; --accent-ink: #EFC186;
+  --status-good: #57B583; --status-explore: #6FA9D6; --status-bad: #E27E7E; --status-neutral: #9AA398;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 28px -14px rgba(0,0,0,.55);
+}
+
+* { box-sizing: border-box; }
+html { color-scheme: light dark; }
+body { margin: 0; background: var(--bg); color: var(--ink);
+  font: 400 16px/1.5 "Public Sans", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+::selection { background: var(--accent); color: #fff; }
+a { color: var(--accent-ink); }
+code { font-family: "IBM Plex Mono", monospace; font-size: .92em; }
+
+.page { max-width: 1100px; margin: 0 auto; padding: 56px 24px 100px; display: flex; flex-direction: column; gap: 64px; }
+
+.header { display: flex; flex-direction: column; gap: 18px; }
+.eyebrow { font: 600 12px/1 "Public Sans", sans-serif; letter-spacing: .14em; text-transform: uppercase; color: var(--accent-ink); }
+h1 { font: 800 clamp(30px, 4.2vw, 46px)/1.08 "Archivo", sans-serif; text-wrap: balance; margin: 0; letter-spacing: -.01em; }
+.subtitle { font: 400 17px/1.6 "Public Sans", sans-serif; color: var(--ink-soft); max-width: 68ch; margin: 0; }
+.stat-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+.stat-chip { font: 500 13px/1 "IBM Plex Mono", monospace; padding: 9px 13px; border-radius: 8px;
+  background: var(--surface); border: 1px solid var(--border); color: var(--ink-soft); box-shadow: var(--shadow); }
+.stat-chip b { color: var(--ink); font-weight: 600; }
+
+.section { display: flex; flex-direction: column; gap: 22px; }
+.section-head { display: flex; flex-direction: column; gap: 8px; }
+.section-label { font: 600 11px/1 "Public Sans", sans-serif; letter-spacing: .12em; text-transform: uppercase; color: var(--accent-ink); }
+.section-title { font: 700 23px/1.25 "Archivo", sans-serif; margin: 0; text-wrap: balance; }
+.section-desc { font: 400 15px/1.65 "Public Sans", sans-serif; color: var(--ink-soft); max-width: 74ch; margin: 0; }
+
+.graph-frame { border: 1px solid var(--border); border-radius: 18px; background: var(--surface); padding: 20px; box-shadow: var(--shadow); }
+.graph-inner { border-radius: 12px; overflow: hidden; border: 1px solid var(--border); background: #fff; }
+.graph-inner .js-plotly-plot { width: 100% !important; }
+.graph-legend { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 16px; padding: 0 4px; font: 500 12px/1 "IBM Plex Mono", monospace; color: var(--ink-soft); }
+.legend-item { display: flex; align-items: center; gap: 7px; }
+.legend-dot { width: 9px; height: 9px; border-radius: 50%; background: currentColor; flex: none; }
+.legend-item.good { color: var(--status-good); }
+.legend-item.explore { color: var(--status-explore); }
+.legend-item.bad { color: var(--status-bad); }
+.legend-item.neutral { color: var(--status-neutral); }
+
+.trial-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; }
+.trial-card { background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--status-explore);
+  border-radius: 10px; padding: 18px 20px; display: flex; flex-direction: column; gap: 10px; box-shadow: var(--shadow); }
+.trial-card[data-verdict="promote"] { border-left-color: var(--status-good); }
+.trial-card[data-verdict="abandon"] { border-left-color: var(--status-bad); }
+.trial-order { font: 600 11px/1 "IBM Plex Mono", monospace; color: var(--ink-faint); letter-spacing: .06em; text-transform: uppercase; }
+.trial-temp { font: 700 28px/1 "Archivo", sans-serif; display: flex; align-items: baseline; gap: 8px; }
+.trial-temp span { font: 500 13px "IBM Plex Mono", monospace; color: var(--ink-soft); }
+.trial-meta { font: 400 13.5px/1.55 "Public Sans", sans-serif; color: var(--ink-soft); }
+.trial-metric { font: 500 12.5px "IBM Plex Mono", monospace; color: var(--ink); display: flex; justify-content: space-between;
+  border-top: 1px dashed var(--border); padding-top: 10px; }
+.verdict-label { display: flex; align-items: center; gap: 7px; font: 600 11.5px "Public Sans", sans-serif; text-transform: uppercase; letter-spacing: .05em; }
+.verdict-label.promote { color: var(--status-good); }
+.verdict-label.branch { color: var(--status-explore); }
+.verdict-label.abandon { color: var(--status-bad); }
+.verdict-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+
+.resolution-list { display: flex; flex-direction: column; gap: 10px; }
+.res-row { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.res-row.plain { display: flex; align-items: center; gap: 12px; padding: 12px 20px; color: var(--ink-faint); font: 400 13.5px "Public Sans", sans-serif; flex-wrap: wrap; }
+.res-row.plain .step-n { font: 600 12px "IBM Plex Mono", monospace; color: var(--ink-faint); }
+.res-row.plain .no-conflict { margin-left: auto; font: 500 11px "IBM Plex Mono", monospace; text-transform: uppercase; letter-spacing: .06em; color: var(--status-neutral); }
+.res-row.conflict { display: flex; flex-direction: column; gap: 14px; padding: 18px 20px 20px; box-shadow: var(--shadow); }
+.res-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.res-head .step-n { font: 700 12.5px "IBM Plex Mono", monospace; color: var(--accent-ink); }
+.res-head .step-name { font: 700 17px "Archivo", sans-serif; }
+.res-sides { display: grid; grid-template-columns: 1fr auto 1fr; gap: 16px; align-items: stretch; }
+.res-side { padding: 13px 15px; border-radius: 9px; background: var(--surface-2); border: 1.5px solid transparent; display: flex; flex-direction: column; gap: 5px; }
+.res-side .src { font: 600 11px "Public Sans", sans-serif; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-faint); display: flex; justify-content: space-between; align-items: center; }
+.res-side .val { font: 500 14px "IBM Plex Mono", monospace; color: var(--ink); }
+.res-side .note { font: 400 12.5px/1.5 "Public Sans", sans-serif; color: var(--ink-soft); }
+.res-side.winner { border-color: var(--status-good); background: var(--surface); }
+.res-side.winner .src { color: var(--status-good); }
+.res-check { font: 700 12px "IBM Plex Mono", monospace; }
+.res-arrow { font: 700 20px "Archivo", sans-serif; color: var(--ink-faint); display: flex; align-items: center; justify-content: center; padding-top: 18px; }
+.res-flag { align-self: flex-start; font: 500 12px "IBM Plex Mono", monospace; color: var(--accent-ink); background: var(--surface-2); padding: 5px 11px; border-radius: 6px; }
+
+.fiche-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 26px 28px;
+  display: flex; flex-direction: column; gap: 20px; box-shadow: var(--shadow); }
+.fiche-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+.fiche-title { font: 700 21px "Archivo", sans-serif; margin: 0 0 6px; }
+.fiche-id { font: 500 12.5px "IBM Plex Mono", monospace; color: var(--ink-faint); }
+.fiche-badges { display: flex; gap: 8px; flex-wrap: wrap; }
+.badge { font: 600 11px "Public Sans", sans-serif; text-transform: uppercase; letter-spacing: .05em; padding: 6px 11px;
+  border-radius: 999px; border: 1px solid var(--status-good); color: var(--status-good); }
+.badge.neutral { border-color: var(--status-neutral); color: var(--status-neutral); }
+.fiche-row { display: flex; flex-direction: column; gap: 6px; }
+.fiche-label { font: 600 11px "Public Sans", sans-serif; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-faint); }
+.fiche-text { font: 400 14.5px/1.6 "Public Sans", sans-serif; color: var(--ink); max-width: 74ch; }
+.parent-pills, .ref-pills { display: flex; gap: 10px; flex-wrap: wrap; }
+.parent-pill { display: flex; flex-direction: column; gap: 2px; padding: 9px 13px; border-radius: 9px; background: var(--surface-2); font: 500 12px "IBM Plex Mono", monospace; }
+.parent-pill .role { font: 600 10.5px "Public Sans", sans-serif; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-faint); }
+.parent-pill .lbl { color: var(--ink); }
+
+.source-table { width: 100%; border-collapse: collapse; font: 400 13.5px/1.5 "Public Sans", sans-serif; }
+.source-table th { text-align: left; font: 600 11px "Public Sans", sans-serif; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--ink-faint); padding: 0 14px 10px 0; border-bottom: 1px solid var(--border); }
+.source-table td { padding: 11px 14px 11px 0; border-bottom: 1px solid var(--border); vertical-align: top; color: var(--ink-soft); }
+.source-table td:first-child { color: var(--ink); font-weight: 500; }
+.source-table tr:last-child td { border-bottom: none; }
+.table-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow); padding: 4px 20px; }
+
+.diff-list { display: flex; flex-direction: column; gap: 4px; }
+.diff-line { font: 500 12.5px "IBM Plex Mono", monospace; color: var(--ink-soft); }
+.diff-line.added { color: var(--status-good); }
+.diff-line.removed { color: var(--status-bad); }
+
+.result-verdict { display: inline-flex; align-items: center; gap: 6px; font: 600 11px "IBM Plex Mono", monospace;
+  text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
+.result-verdict .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
+.result-verdict.met { color: var(--status-good); }
+.result-verdict.not_met { color: var(--status-bad); }
+.result-verdict.partially_met { color: var(--status-explore); }
+.result-verdict.inconclusive { color: var(--status-neutral); }
+
+.evidence-link { color: var(--accent-ink); text-decoration: none; border-bottom: 1px dashed var(--accent-ink);
+  font: 500 13px "Public Sans", sans-serif; }
+.evidence-link:hover { border-bottom-style: solid; }
+.evidence-metric { font: 500 12px "IBM Plex Mono", monospace; color: var(--ink-faint); }
+
+.next-steps { background: var(--surface-2); border-radius: 10px; padding: 14px 16px; border-left: 3px solid var(--accent); }
+.next-steps .label { display: block; font: 600 11px "Public Sans", sans-serif; text-transform: uppercase;
+  letter-spacing: .08em; color: var(--accent-ink); margin-bottom: 4px; }
+.next-steps .text { font: 400 14.5px/1.6 "Public Sans", sans-serif; color: var(--ink); }
+
+.repro { background: #1B2320; color: #D8E0D6; border-radius: 14px; padding: 22px 24px;
+  font: 400 13px/1.85 "IBM Plex Mono", monospace; overflow-x: auto; box-shadow: var(--shadow); }
+.repro .cmt { color: #7C8A79; }
+.repro .cmd::before { content: "$ "; color: #7C8A79; }
+.credit { font: 400 12.5px "Public Sans", sans-serif; color: var(--ink-faint); }
+
+@media (max-width: 640px) {
+  .res-sides { grid-template-columns: 1fr; }
+  .res-arrow { padding-top: 0; }
+  .fiche-top { flex-direction: column; }
+}
+</style>
+
+<div class="page">
+  <header class="header">
+    <div class="eyebrow">Follow · dépôt d'expériences</div>
+    <h1>Fusionner une branche d'essai sans reprendre toute l'exploration</h1>
+    <p class="subtitle">Un scénario réel exécuté avec la bibliothèque : une recette de référence à 5 étapes sur <code>main</code>, une branche <code>essai-cuisson</code> pour faire varier l'étape 3 (température de cuisson) sur trois commits, puis une fusion qui ne rapatrie que cette étape — chaque autre différence est résolue manuellement, chemin par chemin.</p>
+    <div class="stat-row">
+      <span class="stat-chip"><b>6</b> commits</span>
+      <span class="stat-chip"><b>2</b> branches</span>
+      <span class="stat-chip"><b>1</b> fusion (2 parents)</span>
+      <span class="stat-chip"><b>1</b> chemin repris de la branche</span>
+    </div>
+  </header>
+
+  <section class="section">
+    <div class="section-head">
+      <div class="section-label">Graphe de filiation</div>
+      <h2 class="section-title">follow graph — rendu Plotly, sans Graphviz</h2>
+      <p class="section-desc">
+        Disposition en couches calculee par Follow lui-meme (une rangee par generation). Le
+        commit de fusion est le seul noeud a deux aretes entrantes : il descend a la fois de la
+        pointe de <code>main</code> et de la pointe de <code>essai-cuisson</code>.
+      </p>
+    </div>
+    <div class="graph-frame">
+      <div class="graph-inner">
+        <div style="height:100%; width:100%;">                        <script>window.PlotlyConfig = {MathJaxConfig: 'local'};</script>
+        <script charset="utf-8" src="https://cdn.plot.ly/plotly-3.7.0.min.js" integrity="sha256-jvTGqxNp8AGWEcvNLVuKr+8j5dGe9Yw51LQkmDH+IYA=" crossorigin="anonymous"></script>                <div id="follow-graph" class="plotly-graph-div" style="height:100%; width:100%;"></div>            <script>                window.PLOTLYENV=window.PLOTLYENV || {};                                if (document.getElementById("follow-graph")) {                    Plotly.newPlot(                        "follow-graph",                        [{"hoverinfo":"none","line":{"color":"#b0b0b0","width":1.5},"mode":"lines","showlegend":false,"x":[0.0,-0.5,null,-0.5,0.0,null,0.0,0.0,null,0.0,0.5,null,0.5,0.0,null,0.0,0.0,null],"y":[0.0,1.0,null,1.0,2.0,null,2.0,3.0,null,0.0,1.0,null,1.0,4.0,null,3.0,4.0,null],"type":"scatter"},{"hoverinfo":"text","hovertext":["Recette de reference\u003cbr\u003eid: exp_ec093311fc7957b0\u003cbr\u003ebranche: main\u003cbr\u003estatut: concluded\u003cbr\u003eintention: Etablir une recette de reference pour le gateau au yaourt","Essai a 160C\u003cbr\u003eid: exp_8e809baeef7e9cc9\u003cbr\u003ebranche: essai-cuisson\u003cbr\u003estatut: concluded\u003cbr\u003eintention: La levee est-elle amelioree par une cuisson plus douce et plus longue ?","Melange plus long\u003cbr\u003eid: exp_22b350b1ac4c613b\u003cbr\u003ebranche: main\u003cbr\u003estatut: concluded\u003cbr\u003eintention: Un melange plus long homogeneise-t-il mieux la pate ?","Essai a 185C\u003cbr\u003eid: exp_da3401c47061ef84\u003cbr\u003ebranche: essai-cuisson\u003cbr\u003estatut: concluded\u003cbr\u003eintention: Une cuisson plus vive corrige-t-elle la densite du centre ?","Essai a 175C\u003cbr\u003eid: exp_c1db7c589c996571\u003cbr\u003ebranche: essai-cuisson\u003cbr\u003estatut: concluded\u003cbr\u003eintention: Un compromis entre les deux essais precedents corrige-t-il les deux defauts ?","Fusion : temperature de cuisson optimisee\u003cbr\u003eid: exp_bd10d6cb8fdd4c04\u003cbr\u003ebranche: main\u003cbr\u003estatut: concluded\u003cbr\u003eintention: Combiner le melange ameliore (main) et la temperature de cuisson validee sur la branche d'essai, sans reprendre le reste de l'exploration."],"marker":{"color":["#2ca02c","#2ca02c","#2ca02c","#2ca02c","#2ca02c","#2ca02c"],"line":{"color":"#333333","width":1},"size":20},"mode":"markers+text","showlegend":false,"text":["Recette de reference","Essai a 160C","Melange plus long","Essai a 185C","Essai a 175C","Fusion : temperature de cuisson optimisee"],"textposition":"top center","x":[0.0,-0.5,0.5,0.0,0.0,0.0],"y":[0.0,1.0,1.0,2.0,3.0,4.0],"type":"scatter"},{"hoverinfo":"none","mode":"text","showlegend":false,"text":["\u2325 main","\u2325 essai-cuisson"],"textfont":{"color":"#8a6d00","size":11},"x":[0.0,0.0],"y":[3.7,2.7],"type":"scatter"}],                        {"template":{"data":{"histogram2dcontour":[{"type":"histogram2dcontour","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"choropleth":[{"type":"choropleth","colorbar":{"outlinewidth":0,"ticks":""}}],"histogram2d":[{"type":"histogram2d","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"heatmap":[{"type":"heatmap","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"contourcarpet":[{"type":"contourcarpet","colorbar":{"outlinewidth":0,"ticks":""}}],"contour":[{"type":"contour","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"surface":[{"type":"surface","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"mesh3d":[{"type":"mesh3d","colorbar":{"outlinewidth":0,"ticks":""}}],"scatter":[{"fillpattern":{"fillmode":"overlay","size":10,"solidity":0.2},"type":"scatter"}],"parcoords":[{"type":"parcoords","line":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatterpolargl":[{"type":"scatterpolargl","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"bar":[{"error_x":{"color":"#2a3f5f"},"error_y":{"color":"#2a3f5f"},"marker":{"line":{"color":"#E5ECF6","width":0.5},"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"bar"}],"scattergeo":[{"type":"scattergeo","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatterpolar":[{"type":"scatterpolar","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"histogram":[{"marker":{"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"histogram"}],"scattergl":[{"type":"scattergl","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatter3d":[{"type":"scatter3d","line":{"colorbar":{"outlinewidth":0,"ticks":""}},"marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scattermap":[{"type":"scattermap","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scattermapbox":[{"type":"scattermapbox","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatterternary":[{"type":"scatterternary","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scattercarpet":[{"type":"scattercarpet","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"carpet":[{"aaxis":{"endlinecolor":"#2a3f5f","gridcolor":"white","linecolor":"white","minorgridcolor":"white","startlinecolor":"#2a3f5f"},"baxis":{"endlinecolor":"#2a3f5f","gridcolor":"white","linecolor":"white","minorgridcolor":"white","startlinecolor":"#2a3f5f"},"type":"carpet"}],"table":[{"cells":{"fill":{"color":"#EBF0F8"},"line":{"color":"white"}},"header":{"fill":{"color":"#C8D4E3"},"line":{"color":"white"}},"type":"table"}],"barpolar":[{"marker":{"line":{"color":"#E5ECF6","width":0.5},"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"barpolar"}],"pie":[{"automargin":true,"type":"pie"}]},"layout":{"autotypenumbers":"strict","colorway":["#636efa","#EF553B","#00cc96","#ab63fa","#FFA15A","#19d3f3","#FF6692","#B6E880","#FF97FF","#FECB52"],"font":{"color":"#2a3f5f"},"hovermode":"closest","hoverlabel":{"align":"left"},"paper_bgcolor":"white","plot_bgcolor":"#E5ECF6","polar":{"bgcolor":"#E5ECF6","angularaxis":{"gridcolor":"white","linecolor":"white","ticks":""},"radialaxis":{"gridcolor":"white","linecolor":"white","ticks":""}},"ternary":{"bgcolor":"#E5ECF6","aaxis":{"gridcolor":"white","linecolor":"white","ticks":""},"baxis":{"gridcolor":"white","linecolor":"white","ticks":""},"caxis":{"gridcolor":"white","linecolor":"white","ticks":""}},"coloraxis":{"colorbar":{"outlinewidth":0,"ticks":""}},"colorscale":{"sequential":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"sequentialminus":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"diverging":[[0,"#8e0152"],[0.1,"#c51b7d"],[0.2,"#de77ae"],[0.3,"#f1b6da"],[0.4,"#fde0ef"],[0.5,"#f7f7f7"],[0.6,"#e6f5d0"],[0.7,"#b8e186"],[0.8,"#7fbc41"],[0.9,"#4d9221"],[1,"#276419"]]},"xaxis":{"gridcolor":"white","linecolor":"white","ticks":"","title":{"standoff":15},"zerolinecolor":"white","automargin":true,"zerolinewidth":2},"yaxis":{"gridcolor":"white","linecolor":"white","ticks":"","title":{"standoff":15},"zerolinecolor":"white","automargin":true,"zerolinewidth":2},"scene":{"xaxis":{"backgroundcolor":"#E5ECF6","gridcolor":"white","linecolor":"white","showbackground":true,"ticks":"","zerolinecolor":"white","gridwidth":2},"yaxis":{"backgroundcolor":"#E5ECF6","gridcolor":"white","linecolor":"white","showbackground":true,"ticks":"","zerolinecolor":"white","gridwidth":2},"zaxis":{"backgroundcolor":"#E5ECF6","gridcolor":"white","linecolor":"white","showbackground":true,"ticks":"","zerolinecolor":"white","gridwidth":2}},"shapedefaults":{"line":{"color":"#2a3f5f"}},"annotationdefaults":{"arrowcolor":"#2a3f5f","arrowhead":0,"arrowwidth":1},"geo":{"bgcolor":"white","landcolor":"#E5ECF6","subunitcolor":"white","showland":true,"showlakes":true,"lakecolor":"white"},"title":{"x":0.05},"mapbox":{"style":"light"}}},"xaxis":{"visible":false},"yaxis":{"visible":false,"autorange":"reversed"},"margin":{"l":20,"r":20,"t":50,"b":20},"title":{"text":"Follow \u2014 graphe de filiation"},"plot_bgcolor":"white"},                        {"displaylogo": false, "responsive": true, "modeBarButtonsToRemove": ["toImage"]}                    )                };            </script>        </div>
+      </div>
+      <div class="graph-legend">
+        <span class="legend-item good"><span class="legend-dot"></span>concluded &middot; promote</span>
+        <span class="legend-item explore"><span class="legend-dot"></span>concluded &middot; branch (exploration)</span>
+        <span class="legend-item bad"><span class="legend-dot"></span>abandoned</span>
+        <span class="legend-item neutral"><span class="legend-dot"></span>draft / running</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head">
+      <div class="section-label">Branche essai-cuisson</div>
+      <h2 class="section-title">Trois commits pour faire varier une seule etape</h2>
+      <p class="section-desc">
+        Chaque commit derive du precedent et ne change que les parametres de l'etape 3
+        (temperature / duree de cuisson). Objectif herite de la reference : une hauteur &ge; 4,5&nbsp;cm.
+      </p>
+    </div>
+    <div class="trial-grid">
+      <div class="trial-card" data-verdict="branch">
+        <div class="trial-order">Essai 1 · exp_8e809bae</div>
+        <div class="trial-temp">160°C <span>/ 42 min</span></div>
+        <div class="trial-meta">Centre encore humide, texture trop dense.</div>
+        <div class="trial-metric"><span>hauteur_cm</span><span>4.1 cm</span></div>
+        <div class="verdict-label branch"><span class="verdict-dot"></span>Rejete — on continue</div>
+      </div>
+      <div class="trial-card" data-verdict="branch">
+        <div class="trial-order">Essai 2 · exp_da3401c4</div>
+        <div class="trial-temp">185°C <span>/ 28 min</span></div>
+        <div class="trial-meta">Bonne levee mais bords secs et craquelage.</div>
+        <div class="trial-metric"><span>hauteur_cm</span><span>4.6 cm</span></div>
+        <div class="verdict-label branch"><span class="verdict-dot"></span>Rejete — on continue</div>
+      </div>
+      <div class="trial-card" data-verdict="promote">
+        <div class="trial-order">Essai 3 · exp_c1db7c58</div>
+        <div class="trial-temp">175°C <span>/ 32 min</span></div>
+        <div class="trial-meta">Meilleure levee, bords dores, centre moelleux.</div>
+        <div class="trial-metric"><span>hauteur_cm</span><span>4.8 cm</span></div>
+        <div class="verdict-label promote"><span class="verdict-dot"></span>Retenu pour la fusion</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head">
+      <div class="section-label">Resolution de la fusion</div>
+      <h2 class="section-title">follow merge main essai-cuisson --take-steps "[2]"</h2>
+      <p class="section-desc">
+        Pendant que la branche explorait la cuisson, <code>main</code> a evolue de son cote (un
+        melange plus long, etape 1). Les deux lignes divergent donc sur deux etapes — Follow ne
+        choisit rien automatiquement : chaque etape en conflit est resolue explicitement.
+      </p>
+    </div>
+    <div class="resolution-list">
+      <div class="res-row conflict">
+        <div class="res-head">
+          <span class="step-n">[0]</span>
+          <span class="step-name">Etape 1 — Melanger le sec</span>
+        </div>
+        <div class="res-sides">
+          <div class="res-side winner">
+            <div class="src">main <span class="res-check">✓ retenu</span></div>
+            <div class="val">« …fouetter 4 min (au lieu de 2) »</div>
+            <div class="note">Changement independant, commit exp_22b350b1 sur main</div>
+          </div>
+          <div class="res-arrow">≠</div>
+          <div class="res-side">
+            <div class="src">essai-cuisson</div>
+            <div class="val">« …fouetter 2 min »</div>
+            <div class="note">Jamais retouche sur cette branche</div>
+          </div>
+        </div>
+        <div class="res-flag">chemin non liste dans --take-steps &rarr; valeur de ref_a (main) conservee par defaut</div>
+      </div>
+      <div class="res-row plain"><span class="step-n">[1]</span> Etape 2 — Melanger le liquide <span class="no-conflict">identique des deux côtés</span></div>
+      <div class="res-row conflict">
+        <div class="res-head">
+          <span class="step-n">[2]</span>
+          <span class="step-name">Etape 3 — Cuire</span>
+        </div>
+        <div class="res-sides">
+          <div class="res-side">
+            <div class="src">main</div>
+            <div class="val">170°C / 35 min</div>
+            <div class="note">Valeur de reference, jamais retestee sur main</div>
+          </div>
+          <div class="res-arrow">&rarr;</div>
+          <div class="res-side winner">
+            <div class="src">essai-cuisson <span class="res-check">✓ retenu</span></div>
+            <div class="val">175°C / 32 min</div>
+            <div class="note">Valide apres 3 essais (voir ci-dessus)</div>
+          </div>
+        </div>
+        <div class="res-flag">--take-steps "[2]" &rarr; valeur de ref_b (essai-cuisson) explicitement demandee</div>
+      </div>
+      <div class="res-row plain"><span class="step-n">[3]</span> Etape 4 — Refroidir <span class="no-conflict">identique des deux côtés</span></div>
+      <div class="res-row plain"><span class="step-n">[4]</span> Etape 5 — Demouler <span class="no-conflict">identique des deux côtés</span></div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head">
+      <div class="section-label">Fiche de l'experience</div>
+      <h2 class="section-title">Le commit de fusion, sur main</h2>
+    </div>
+    <div class="fiche-card">
+      <div class="fiche-top">
+        <div>
+          <div class="fiche-title">Fusion : temperature de cuisson optimisee</div>
+          <div class="fiche-id">exp_bd10d6cb8fdd4c04 · branche main</div>
+        </div>
+        <div class="fiche-badges">
+          <span class="badge">concluded</span>
+          <span class="badge">promote</span>
+        </div>
+      </div>
+
+      <div class="fiche-row">
+        <div class="fiche-label">Intention</div>
+        <p class="fiche-text">Combiner le melange ameliore (main) et la temperature de cuisson validee sur la branche d'essai, sans reprendre le reste de l'exploration.</p>
+      </div>
+
+      <div class="fiche-row">
+        <div class="fiche-label">Parents (commit de fusion — deux ascendances)</div>
+        <div class="parent-pills">
+          <div class="parent-pill"><span class="role">baseline · main</span><span class="lbl">exp_22b350b1 — Melange plus long</span></div>
+          <div class="parent-pill"><span class="role">merge_source · essai-cuisson</span><span class="lbl">exp_c1db7c58 — Essai a 175C</span></div>
+        </div>
+      </div>
+
+      <div class="fiche-row">
+        <div class="fiche-label">Conclusion</div>
+        <p class="fiche-text">Recette consolidee : melange 4 min + cuisson 175C/32min. Les essais a 160C et 185C restent tracables sur la branche essai-cuisson pour reference future.</p>
+      </div>
+    </div>
+  </section>
+
+<footer class="footer section">
+    <div class="section-head">
+      <div class="section-label">Reproduire</div>
+      <h2 class="section-title">Les memes commandes, en CLI</h2>
+    </div>
+    <div class="repro">
+      <div class="cmt"># apres les 3 commits sur la branche essai-cuisson…</div>
+      <div class="cmd">follow diff main essai-cuisson --repo labo --steps</div>
+      <div>~ [2].parameters.temperature: 170 C -&gt; 175 C</div>
+      <div>~ [2].parameters.duree: 35 min -&gt; 32 min</div>
+      <br />
+      <div class="cmd">follow merge main essai-cuisson --repo labo \</div>
+      <div>&nbsp;&nbsp;--title "Fusion : temperature de cuisson optimisee" \</div>
+      <div>&nbsp;&nbsp;--intent "Adopter la cuisson validee sans reprendre le reste" \</div>
+      <div>&nbsp;&nbsp;--take-steps "[2]" --out merge.json</div>
+      <br />
+      <div class="cmd">follow commit merge.json --repo labo</div>
+      <div>exp_bd10d6cb8f…  (main)  Fusion : temperature de cuisson optimisee</div>
+    </div>
+    <p class="credit">Genere avec <code>python -m demos.fusion_selective</code> — toutes les valeurs ci-dessus viennent d'une execution reelle du scenario (voir demos/fusion_selective.py).</p>
+  </footer>
+</div>

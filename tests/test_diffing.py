@@ -40,3 +40,16 @@ def test_added_and_removed_ingredients():
     kinds = {e.path: e.kind for e in diff.entries}
     assert kinds["ingredients.cocoa"] == "added"
     assert kinds["ingredients.sugar"] == "removed"
+
+
+def test_str_formatting_for_every_diff_kind():
+    before = _cake(200, 180)
+    after = _cake(200, 180)
+    after.ingredients["cocoa"] = Quantity(value=50, unit="g")
+    del after.ingredients["sugar"]
+    after.ingredients["flour"] = Quantity(value=240, unit="g")
+
+    lines = {e.path: str(e) for e in diff_structures(before, after)}
+    assert lines["ingredients.cocoa"] == "+ ingredients.cocoa: 50 g"
+    assert lines["ingredients.sugar"] == "- ingredients.sugar: 150 g"
+    assert lines["ingredients.flour"] == "~ ingredients.flour: 200 g -> 240 g"

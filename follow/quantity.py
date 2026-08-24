@@ -8,7 +8,11 @@ ScalarValue = Union[float, int, str, bool]
 
 
 class Quantity(BaseModel):
-    """A measured or specified value, with the unit/uncertainty needed to compare it across experiments."""
+    """A measured or specified value, with the unit/uncertainty needed to compare it across
+    experiments. Leave ``unit`` unset (``None``) for a dimensionless value - an empty string is
+    treated the same as unset by :func:`~follow.formatting.format_value` (both are falsy), so
+    don't rely on ``unit=""`` to mean something different from no unit at all.
+    """
 
     model_config = ConfigDict(frozen=True)
 

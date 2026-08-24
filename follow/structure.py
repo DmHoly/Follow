@@ -15,6 +15,17 @@ class Structure(BaseModel):
     the physics/domain being modelled - genericity comes from walking the fields generically
     (see :mod:`follow.diffing`), not from a fixed schema. Prefer :class:`follow.quantity.Quantity`
     for leaf values so units and uncertainty travel with the number and diffs stay meaningful.
+
+    Define subclasses at module top level. ``registry_key()`` (used to round-trip ``structure``
+    back into the right class - see :meth:`resolve`) is derived from ``__module__`` and
+    ``__qualname__``; a class defined inside a function or another class gets a qualname like
+    ``make_thing.<locals>.MyStructure`` that resolves fine in-process but breaks the CLI's
+    ``--structure-type module.Class`` dotted-path import (there's no such importable attribute
+    path). Redefining a class under the same module-level name (e.g. re-running a script or a
+    notebook cell) also silently replaces its registry entry - fine for the common case, but a
+    previously committed experiment whose stored ``structure`` no longer matches the new
+    definition's fields will fail to reload with a validation error, not a clear "shape changed"
+    message.
     """
 
     model_config = ConfigDict(extra="forbid")
