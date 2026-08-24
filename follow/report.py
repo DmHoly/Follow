@@ -216,6 +216,42 @@ def _esc(value: Any) -> str:
     return _html.escape(str(value), quote=True)
 
 
+#: Public name for :func:`_esc`, for callers outside this module that compose their own page and
+#: need to escape repository data before handing it to :func:`render_page`'s raw-HTML slots.
+escape_html = _esc
+
+
+# Schemes that execute rather than locate. An Evidence.source is a free-text pointer typed by
+# whoever wrote the experiment, so it reaches href="..." as attacker-controllable input; escaping
+# it (which _esc does) keeps it inside the attribute but does nothing about what the browser then
+# does with "javascript:...". Everything else - http, https, file, doi, notebook, a relative
+# path - is left exactly as it is: this refuses the three dangerous schemes rather than
+# allow-listing, so an unusual-but-harmless source keeps working as a link.
+_UNSAFE_URI_SCHEMES = frozenset({"javascript", "data", "vbscript"})
+
+
+def _is_safe_href(source: Any) -> bool:
+    """False for a URI whose scheme executes script instead of pointing at something.
+
+    The scheme is read after stripping whitespace and control characters, which browsers ignore
+    when parsing a URL - so ``"java\\tscript:alert(1)"`` is recognised as ``javascript:`` here too.
+    """
+    text = "".join(ch for ch in str(source) if ch.isprintable() and not ch.isspace())
+    scheme, separator, _ = text.partition(":")
+    return not (separator and scheme.lower() in _UNSAFE_URI_SCHEMES)
+
+
+def _evidence_link(evidence: Evidence) -> str:
+    """An evidence's description, linked to its source - as plain text when that source is a
+    scheme we won't put in an href (see :data:`_UNSAFE_URI_SCHEMES`). The description is still
+    shown either way: dropping the row entirely would hide a piece of evidence the experiment
+    actually cites, which is worse than showing it unlinked.
+    """
+    if not _is_safe_href(evidence.source):
+        return f'<span class="evidence-link">{_esc(evidence.description)}</span>'
+    return f'<a class="evidence-link" href="{_esc(evidence.source)}">{_esc(evidence.description)}</a>'
+
+
 def trial_card(
     *,
     order_label: str,
@@ -472,7 +508,7 @@ def results_table(objective_results: Sequence[ObjectiveResult], evidence: Sequen
             if e is None:
                 proof_links.append(_esc(eid))
             else:
-                proof_links.append(f'<a class="evidence-link" href="{_esc(e.source)}">{_esc(e.description)}</a>')
+                proof_links.append(_evidence_link(e))
         proof = ", ".join(proof_links) if proof_links else "—"
         observed = _esc(format_value(r.observed.model_dump(mode="json"))) if r.observed else "—"
         rows.append(
@@ -501,7 +537,7 @@ def results_table(objective_results: Sequence[ObjectiveResult], evidence: Sequen
     unlinked_html = ""
     if unlinked:
         items = "".join(
-            f'<div><a class="evidence-link" href="{_esc(e.source)}">{_esc(e.description)}</a>'
+            f"<div>{_evidence_link(e)}"
             + "".join(
                 f' <span class="evidence-metric">· {_esc(k)}: {_esc(format_value(v.model_dump(mode="json")))}</span>'
                 for k, v in e.metrics.items()
@@ -615,14 +651,21 @@ def render_page(
 ) -> str:
     """Assemble a themed, self-contained page from pre-rendered section HTML.
 
-    ``stat_chips`` are raw inner-HTML strings for ``.stat-chip`` spans; ``sections`` and
-    ``footer`` are raw ``<section class="section">...</section>``/``<footer>...</footer>``
-    blocks the caller builds with the CSS vocabulary above.
+    Two different contracts, by position in the document rather than by convention:
+
+    - ``title`` and ``description`` land in a ``<title>`` element and a ``content="..."``
+      attribute, where markup is never meaningful and an unescaped value can only break out of
+      its context - so both are escaped here, unconditionally.
+    - ``eyebrow``, ``heading``, ``subtitle``, ``stat_chips``, ``sections`` and ``footer`` are
+      inserted as raw HTML, because callers legitimately compose them (``<b>12</b> commits``,
+      a ``<code>main</code>`` in a sentence, whole ``<section>`` blocks). **Anything derived
+      from repository data must be escaped by the caller with :func:`escape_html` before it
+      gets here** - see how :func:`follow.cli.cmd_explode` passes an experiment's own title.
     """
     chips = "\n".join(f'      <span class="stat-chip">{c}</span>' for c in stat_chips)
     body_sections = "\n\n".join(sections)
-    return f"""<title>{title}</title>
-<meta name="description" content="{description}" />
+    return f"""<title>{_esc(title)}</title>
+<meta name="description" content="{_esc(description)}" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -869,8 +912,8 @@ def render_study_html(
         title=title,
         description=description,
         eyebrow="Follow · compte rendu d'étude",
-        heading=title,
-        subtitle=description,
+        heading=_esc(title),
+        subtitle=_esc(description),
         stat_chips=stat_chips,
         sections=sections,
         footer=footer,

@@ -4,6 +4,10 @@ Revue effectuée sur `302885a`, avec `pytest` au vert (221 tests).
 **Chaque bug des parties 1 et 2 a été reproduit par exécution sur le dépôt non modifié**, pas
 déduit à la lecture.
 
+> **État au commit suivant :** les BUG 1, 2, 3 et 4 sont **corrigés** (voir la partie 6, entrées
+> 1 à 4), chacun accompagné de tests de régression qui échouent sur le code d'origine. Les
+> BUG 5 à 14 restent ouverts et leurs constats ci-dessous sont toujours valables.
+
 Le socle est sain : modèles gelés, refus de commits qui abandonneraient un historique, messages
 d'erreur qui expliquent. Ce qui suit, ce sont les endroits où le code *ne dit rien* alors qu'il
 devrait crier.
@@ -20,7 +24,7 @@ devrait crier.
 
 ## Partie 1 — Six façons de perdre des données sans jamais voir d'erreur
 
-### BUG 1 — La référence « baseline » ne bouge jamais du premier commit
+### BUG 1 — La référence « baseline » ne bouge jamais du premier commit  ✅ corrigé
 
 `follow/repository.py:395` — `Repository.derive`
 
@@ -41,7 +45,13 @@ de `render_fiche` et tout le raisonnement « qu'est-ce qui a varié » comparent
 C'est le cœur de la promesse du projet, et rien ne le signale. Le test existant s'arrête à la
 première génération.
 
-### BUG 2 — Une étiquette libre réutilisée bloque le commit
+**Correctif :** `derive` n'hérite plus des références de lignage du parent (`baseline`,
+`merge_source`) et pose systématiquement la baseline vers le parent immédiat — la règle que
+`merge` appliquait déjà. Les autres références (`target_spec`, `prior_art`…) restent héritées.
+Verrouillé par `test_baseline_follows_the_immediate_parent_across_a_chain_of_derives` et trois
+tests voisins.
+
+### BUG 2 — Une étiquette libre réutilisée bloque le commit  ✅ corrigé
 
 `follow/repository.py:577-585` — `Repository._commit`
 
@@ -59,7 +69,13 @@ repo.new(..., tags=["important"]).commit()   → FollowError: tag 'important' al
 (étiquette descriptive, ref citable) partagent un champ ; il en faut deux, ou `tags` ne doit plus
 créer de refs.
 
-### BUG 3 — Un nom de facteur mal orthographié produit un plan sans aucune variation
+**Correctif :** `_commit` ne promeut plus `Experiment.tags` en refs. Les étiquettes sont des
+métadonnées descriptives réutilisables à volonté (comme `metadata`) ; un tag de dépôt se crée
+uniquement via `repo.tag()`, qui conserve son immuabilité. Le test qui verrouillait l'ancien
+comportement (`test_tags_passed_at_commit_time_are_applied`) a été remplacé par trois tests du
+nouveau contrat.
+
+### BUG 3 — Un nom de facteur mal orthographié produit un plan sans aucune variation  ✅ corrigé
 
 `follow/design.py:75, 86, 117, 219` — `model_copy(update=…)`
 
@@ -78,11 +94,16 @@ full_factorial(ref, implant_dose=[2.0, 4.0])   # float au lieu de Quantity
 ```
 
 **Effet :** le garde-fou confirme un plan vide, et le second cas écrit dans le dépôt un JSON que
-`load_structure` ne saura plus relire. Correctif : revalider
-(`type(ref).model_validate({**ref.model_dump(), **updates})`) ou au minimum vérifier
-`set(factors) <= set(type(ref).model_fields)`.
+`load_structure` ne saura plus relire.
 
-### BUG 4 — XSS depuis le titre d'une expérience, via `follow explode`
+**Correctif :** les quatre constructeurs passent par un helper `_variant` qui vérifie le nom du
+champ contre `model_fields` puis revalide via `model_validate` — un nom inconnu lève un
+`ValueError` listant les champs disponibles, un type incorrect lève à la construction et non au
+rechargement. `check_identifiability` valide aussi ses noms de facteurs, plutôt que de répondre
+« rien n'est confondu » à propos d'un facteur qu'elle n'a jamais regardé. Neuf tests de
+régression.
+
+### BUG 4 — XSS depuis le titre d'une expérience, via `follow explode`  ✅ corrigé
 
 `follow/report.py:605` (`render_page`) · `follow/cli.py:345-353`
 
@@ -100,6 +121,15 @@ balise brute présente dans la page : True
 laisse croire que le sujet est traité ; le chemin `explode` n'est couvert par aucun test
 d'échappement. Même famille : `report.py:475,504` émettent `href="{source}"` sans filtrer le
 schéma — `javascript:alert(…)` passe (`_esc` échappe les guillemets, pas l'URI).
+
+**Correctif :** `render_page` échappe désormais `title` et `description`, dont les emplacements
+(`<title>`, attribut `content`) n'admettent jamais de balisage. `eyebrow`/`heading`/`subtitle`
+gardent leur contrat HTML brut — les démos y composent volontairement du `<code>` — mais le
+contrat est explicite dans la docstring et `cmd_explode` échappe désormais le titre
+d'expérience qu'il y injecte, via le nouveau nom public `report.escape_html`. Les liens de
+preuve passent par `_evidence_link`, qui refuse les schémas `javascript:`/`data:`/`vbscript:`
+(reconnus même coupés par des caractères de contrôle) et affiche alors la preuve en texte
+plutôt que de la masquer. Six tests de régression, dont deux bout-en-bout sur la CLI.
 
 ### BUG 5 — `follow graph` plante sur un dépôt profond, une fois sur deux
 
@@ -399,10 +429,10 @@ lignes chacun et ferment les trous de test correspondants.
 
 | # | Action | Réfs |
 |---|---|---|
-| 1 | Poser la baseline sur le parent réel dans `derive`, et tester trois générations. | BUG 1 |
-| 2 | Valider les `update` de `design` contre `model_fields`, puis revalider le modèle. | BUG 3 |
-| 3 | Échapper dans `render_page`, filtrer les schémas d'URI des preuves, ajouter le test `explode`. | BUG 4 |
-| 4 | Séparer étiquettes et refs : `tags` ne crée plus de tag de dépôt. | BUG 2 |
+| ✅ 1 | Poser la baseline sur le parent réel dans `derive`, et tester trois générations. | BUG 1 |
+| ✅ 2 | Valider les `update` de `design` contre `model_fields`, puis revalider le modèle. | BUG 3 |
+| ✅ 3 | Échapper dans `render_page`, filtrer les schémas d'URI des preuves, ajouter le test `explode`. | BUG 4 |
+| ✅ 4 | Séparer étiquettes et refs : `tags` ne crée plus de tag de dépôt. | BUG 2 |
 | 5 | Rendre `_depths` itératif ; écritures atomiques via `os.replace`. | BUG 5, 14 |
 | 6 | Vérifier l'existence de l'objet dans `_resolve_ref` ; aligner `branch()` sur les gardes de `commit()`. | BUG 6, 7 |
 | 7 | Faire hériter toutes les erreurs de `FollowError`, puis simplifier les `except` de la CLI. | BUG 12 |

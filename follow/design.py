@@ -61,18 +61,51 @@ def arange(start: float, stop: float, step: float, *, unit: str | None = None) -
 # -- design builders ------------------------------------------------------------------------
 
 
+def _check_fields(reference: BaseModel, names: Sequence[str], *, what: str = "facteur") -> None:
+    """Reject a field name the reference doesn't actually have, before it silently does nothing.
+
+    ``model_copy(update=...)`` writes whatever it is given without validating, bypassing
+    ``Structure``'s ``extra="forbid"`` - so a typo'd factor name used to produce a design where
+    the intended field never varied at all, with no error anywhere (and
+    :func:`check_identifiability` then cheerfully reporting the empty design as clean).
+    """
+    known = type(reference).model_fields
+    unknown = sorted(name for name in names if name not in known)
+    if unknown:
+        raise ValueError(
+            f"{what}(s) inconnu(s) de {type(reference).__name__}: {unknown} - "
+            f"champs disponibles: {sorted(known)}"
+        )
+
+
+def _variant(reference: T, updates: dict[str, Any]) -> T:
+    """One variant of ``reference`` with ``updates`` applied - validated, unlike ``model_copy``.
+
+    Re-validating through the model is what turns "a float where a Quantity was expected" into an
+    error here, instead of a repository entry that only fails much later, at reload time.
+    """
+    _check_fields(reference, list(updates))
+    return type(reference).model_validate({**reference.model_dump(), **updates})
+
+
 def _number(variants: list[T], id_field: str | None) -> list[T]:
     if id_field is None:
         return variants
-    return [v.model_copy(update={id_field: i + 1}) for i, v in enumerate(variants)]
+    if variants:
+        _check_fields(variants[0], [id_field], what="id_field")
+    return [_variant(v, {id_field: i + 1}) for i, v in enumerate(variants)]
 
 
 def sweep(reference: T, field: str, values: Sequence[Any], *, id_field: str | None = None) -> list[T]:
     """One factor at a time: ``field`` takes each value in ``values``, everything else stays
     exactly as ``reference``. Always statistically identifiable - there is only one thing
     changing, so nothing to confound it with.
+
+    Raises :class:`ValueError` if ``field`` isn't a field of ``reference`` (a typo would otherwise
+    produce N identical variants and a design that varies nothing), and a
+    :class:`pydantic.ValidationError` if a value doesn't fit that field's type.
     """
-    return _number([reference.model_copy(update={field: v}) for v in values], id_field)
+    return _number([_variant(reference, {field: v}) for v in values], id_field)
 
 
 def full_factorial(reference: T, *, id_field: str | None = None, **factors: Sequence[Any]) -> list[T]:
@@ -80,10 +113,14 @@ def full_factorial(reference: T, *, id_field: str | None = None, **factors: Sequ
     lengths entities (5 doses x 5 temperatures = 25). A full factorial is always identifiable:
     every main effect and every interaction can be estimated independently of every other,
     by construction.
+
+    Every factor name must be a field of ``reference`` - an unknown one raises rather than
+    quietly producing a design in which that factor never varied.
     """
     names = list(factors)
+    _check_fields(reference, names)
     grids = [factors[name] for name in names]
-    variants = [reference.model_copy(update=dict(zip(names, combo))) for combo in itertools.product(*grids)]
+    variants = [_variant(reference, dict(zip(names, combo))) for combo in itertools.product(*grids)]
     return _number(variants, id_field)
 
 
@@ -94,9 +131,13 @@ def latin_hypercube(
     the combinations themselves are randomized - a screening design for when a full factorial
     would need too many runs, or when you don't yet know which factors matter. Pass each factor
     as ``(low, high)`` or ``(low, high, unit)``.
+
+    Every factor name must be a field of ``reference`` - an unknown one raises rather than
+    quietly producing a design in which that factor never varied.
     """
     rng = np.random.default_rng(seed)
     names = list(factor_ranges)
+    _check_fields(reference, names)
     cut = np.linspace(0, 1, n + 1)
     samples = np.empty((n, len(names)))
     for j in range(len(names)):
@@ -114,7 +155,7 @@ def latin_hypercube(
             unit = spec[2] if len(spec) > 2 else None
             value = low + row[j] * (high - low)
             updates[name] = Quantity(value=value, unit=unit) if unit else value
-        variants.append(reference.model_copy(update=updates))
+        variants.append(_variant(reference, updates))
     return _number(variants, id_field)
 
 
@@ -192,7 +233,11 @@ def fractional_factorial(
     2^(k+len(generators))), at the cost of aliasing some effects together - which effects,
     exactly, is right there in the returned :class:`FractionalFactorial`, not something you find
     out after the fact from confusing results.
+
+    Every factor name must be a field of ``reference`` - an unknown one raises rather than
+    quietly producing a design in which that factor never varied.
     """
+    _check_fields(reference, list(factors))
     base_names = [name for name in factors if name not in generators]
     if not base_names:
         raise ValueError("au moins un facteur doit être un facteur de base (absent de `generators`)")
@@ -216,7 +261,7 @@ def fractional_factorial(
             unit = spec[2] if len(spec) > 2 else None
             value = high if sign == 1 else low
             updates[name] = Quantity(value=value, unit=unit) if unit else value
-        variants.append(reference.model_copy(update=updates))
+        variants.append(_variant(reference, updates))
     variants = _number(variants, id_field)
 
     words = [frozenset(word) | {name} for name, word in generators.items()]
@@ -241,7 +286,15 @@ def check_identifiability(variants: Sequence[BaseModel], factors: Sequence[str],
     This is a correlation check on the design itself, before any measurement - it has nothing to
     do with the experiment's outcome, only with whether the *plan* could ever separate these two
     factors' effects no matter what gets measured.
+
+    Every name in ``factors`` must be a field of the variants being checked. Silently skipping an
+    unknown one would make this function answer "nothing is confounded" about a factor it never
+    looked at - the most misleading answer it could give, since the whole point is to be trusted
+    when it says a design is clean.
     """
+    if not variants:
+        return []
+    _check_fields(variants[0], factors)
     columns: dict[str, np.ndarray] = {}
     for name in factors:
         values = []

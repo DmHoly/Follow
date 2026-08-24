@@ -23,7 +23,7 @@ from .entities import find_entity_mentions
 from .formatting import format_value
 from .graphing import render_graph_html
 from .rendering import render_fiche, render_log
-from .report import batch_table, render_page, render_study_html
+from .report import batch_table, escape_html, render_page, render_study_html
 from .repository import FollowError, Repository
 from .structure import Structure
 
@@ -342,12 +342,16 @@ def cmd_explode(args: argparse.Namespace) -> int:
         return _fail(f"entités hétérogènes dans {args.path!r}: {exc}")
 
     if args.out is not None:
-        section = batch_table(variation, title=f"{experiment.title} — {args.path}")
+        # the experiment's own title is repository data, not a literal this command controls:
+        # render_page inserts heading/subtitle as raw HTML, so it is escaped here before it gets
+        # there (title/description are escaped by render_page itself, being attribute/text slots)
+        page_title = f"{experiment.title} — {args.path}"
+        section = batch_table(variation, title=page_title)
         html = render_page(
-            title=f"{experiment.title} — {args.path}",
+            title=page_title,
             description=f"Vue explosée de {args.path!r} pour l'expérience {experiment.id}.",
             eyebrow="Follow · vue explosée",
-            heading=f"{experiment.title} — {args.path}",
+            heading=escape_html(page_title),
             subtitle=f"{variation.entity_count} entités, {len(variation.varying)} paramètre(s) variable(s).",
             stat_chips=[f"<b>{variation.entity_count}</b> entités", f"<b>{len(variation.varying)}</b> variables"],
             sections=[f'  <section class="section">\n{section}\n  </section>'],

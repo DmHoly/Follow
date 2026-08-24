@@ -137,6 +137,11 @@ class Experiment(BaseModel):
     evidence: list[Evidence] = Field(default_factory=list)
     conclusion: Conclusion = Field(default_factory=Conclusion)
 
+    # free-form descriptive labels ("à refaire", "pilote", "campagne-Q3"), the same
+    # never-validated spirit as `metadata`. Deliberately NOT repository tags: several experiments
+    # may carry the same label, and none of them creates a ref. A citable, immutable pointer to
+    # one experiment is a repository tag, created explicitly with
+    # :meth:`Repository.tag <follow.repository.Repository.tag>`.
     tags: list[str] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
     # answers to the repository's commit form (follow.commit_form), if one was configured -

@@ -340,6 +340,10 @@ class Repository:
     ) -> ExperimentBuilder:
         """Start an experiment on ``branch``. If the branch already has a tip, it becomes the
         parent automatically (continuing that line of work), unless ``parents`` is given.
+
+        ``tags`` are free-form descriptive labels stored on the experiment; they do not create
+        repository tags, so the same label may be reused on as many experiments as you like. Use
+        :meth:`tag` for a citable, immutable pointer to one specific experiment.
         """
         parent_ids = parents if parents is not None else ([self._branches[branch]] if branch in self._branches else [])
         return ExperimentBuilder(
@@ -375,10 +379,21 @@ class Repository:
 
         The parent's structure, objectives, protocol steps and references are carried over as a
         starting point (override any of them before committing), and a "baseline" reference back
-        to the parent is added automatically unless one is already present - that's what makes
-        every derived experiment comparable to what it came from without extra bookkeeping.
+        to the parent is always added - that's what makes every derived experiment comparable to
+        what it came from without extra bookkeeping.
+
+        The parent's own lineage references (``baseline``, and ``merge_source`` when deriving from
+        a merge commit) are deliberately *not* carried over: they describe where the *parent* came
+        from, not this experiment, and keeping them would leave the new commit pointing its
+        baseline at its grandparent - so :meth:`ExperimentBuilder.diff_from_baseline` and every
+        "what changed versus the reference" view would silently compare against the wrong
+        ancestor. Every other reference (a ``target_spec``, a ``prior_art`` citation...) is carried
+        over as before, the same way :meth:`merge` does it.
         """
         parent = self.get(ref)
+        carried_references = (
+            [r for r in parent.references if r.role not in ("baseline", "merge_source")] if carry_references else ()
+        )
         builder = ExperimentBuilder(
             self,
             branch=new_branch or parent.branch,
@@ -389,11 +404,10 @@ class Repository:
             author=author,
             hypothesis=hypothesis,
             objectives=parent.objectives if carry_objectives else (),
-            references=parent.references if carry_references else (),
+            references=carried_references,
             steps=parent.steps if carry_steps else (),
         )
-        if not any(r.role == "baseline" for r in builder.references):
-            builder.add_reference(role="baseline", experiment_id=parent.id, label=f"parent: {parent.title}")
+        builder.add_reference(role="baseline", experiment_id=parent.id, label=f"parent: {parent.title}")
         return builder
 
     def merge(
@@ -500,6 +514,9 @@ class Repository:
     def tag(self, name: str, at: str, *, force: bool = False) -> None:
         """Point tag ``name`` (an immutable label) at the experiment resolved by ``at``.
 
+        This is the only way a repository tag is created - an experiment's own ``tags`` field is
+        just descriptive metadata and never becomes a ref (several experiments can share a label).
+
         Raises if ``name`` already tags a *different* experiment - tags are meant to be a
         stable, citable reference, so silently repointing one defeats the point. Pass
         ``force=True`` if you deliberately want to move it anyway.
@@ -574,13 +591,13 @@ class Repository:
         payload = provisional.model_dump(mode="json", exclude={"id"})
         experiment = provisional.model_copy(update={"id": content_id("experiment", payload)})
 
-        for tag in experiment.tags:
-            self._ensure_tag_assignment(tag, experiment.id, force=False)
-
+        # Experiment.tags are free-form descriptive labels, like `metadata` - deliberately NOT
+        # repository tags. Promoting them to refs made a second experiment reusing an ordinary
+        # label ("important", "à refaire") fail its commit outright, with a message about
+        # repo.tag() the user had never called: one field cannot be both a throwaway label and an
+        # immutable citable pointer. Repository tags are created explicitly, via repo.tag().
         self._objects[experiment.id] = experiment
         self._branches[experiment.branch] = experiment.id
-        for tag in experiment.tags:
-            self._tags[tag] = experiment.id
 
         if self.path is not None:
             self._persist_experiment(experiment)

@@ -90,7 +90,10 @@ fusionner dedans). Voir :doc:`merging` pour la sémantique complète.
 -------------------------------------
 
 Fige un brouillon (produit par ``new``/``derive``/``merge``, ou édité à la main) dans le dépôt.
-Calcule l'id par contenu, avance la branche, applique les tags.
+Calcule l'id par contenu et avance la branche. Le champ ``tags`` du brouillon est une simple
+étiquette descriptive stockée sur l'expérience : il ne crée aucun tag de dépôt (plusieurs
+expériences peuvent porter la même étiquette). Pour un pointeur citable et immuable, utilisez
+``follow tag``.
 
 ``follow log [ref]``
 -----------------------

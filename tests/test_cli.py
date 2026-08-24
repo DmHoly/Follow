@@ -592,3 +592,53 @@ def test_trace_links_two_unrelated_experiments_by_shared_entity_id(tmp_path, cap
     assert len(lines) == 2
     assert batch_id in lines[0] and "Split moules" in lines[0]
     assert followup_id in lines[1] and "Injection Nutella" in lines[1]
+
+
+def test_explode_html_escapes_an_experiment_title_containing_markup(tmp_path, capsys):
+    # the experiment's title is repository data, and `explode --out` feeds it to render_page's
+    # raw-HTML heading slot - it must arrive escaped, not as live markup
+    repo_path = str(tmp_path / "repo")
+    main(["init", repo_path])
+    capsys.readouterr()
+    struct = dict(WAFER_LOT_STRUCT)
+    struct_file = _write_json(tmp_path / "lot.json", struct)
+    draft = str(tmp_path / "draft.json")
+    main(
+        [
+            "new", "--repo", repo_path, "--branch", "main",
+            "--title", "Lot <img src=x onerror=alert(1)>", "--intent", "split",
+            "--structure-type", "examples.wafer_doe.WaferLot", "--structure-file", struct_file,
+            "--out", draft,
+        ]
+    )
+    capsys.readouterr()
+    main(["commit", draft, "--repo", repo_path])
+    capsys.readouterr()
+
+    out_file = tmp_path / "explode.html"
+    assert main(["explode", "main", "wafers", "--repo", repo_path, "--out", str(out_file)]) == 0
+    html = out_file.read_text()
+    assert "<img src=x onerror=alert(1)>" not in html
+    assert "&lt;img src=x onerror=alert(1)&gt;" in html
+
+
+def test_report_html_escapes_a_title_passed_on_the_command_line(tmp_path, capsys):
+    repo_path = str(tmp_path / "repo")
+    main(["init", repo_path])
+    capsys.readouterr()
+    struct_file = _write_json(tmp_path / "cake.json", CAKE_STRUCT)
+    draft = str(tmp_path / "draft.json")
+    main(
+        [
+            "new", "--repo", repo_path, "--branch", "main", "--title", "v1", "--intent", "start",
+            "--structure-type", "examples.recipe.CakeRecipe", "--structure-file", struct_file, "--out", draft,
+        ]
+    )
+    capsys.readouterr()
+    main(["commit", draft, "--repo", repo_path])
+    capsys.readouterr()
+
+    out_file = tmp_path / "report.html"
+    assert main(["report", "--repo", repo_path, "--title", "<script>alert(1)</script>",
+                 "--out", str(out_file), "--no-embed"]) == 0
+    assert "<script>alert(1)</script>" not in out_file.read_text()
