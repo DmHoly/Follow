@@ -9,6 +9,7 @@ import pytest
 
 from examples.recipe import CakeRecipe
 from follow import Quantity, Repository
+from follow.commit_form import CommitForm
 from follow.menu import (
     _action_close_draft,
     _action_derive,
@@ -18,6 +19,7 @@ from follow.menu import (
     _action_new,
     _action_report,
     _action_show,
+    _collect_form_answers,
     _require_questionary,
     questionary,
     run_menu,
@@ -102,7 +104,7 @@ def test_action_new_with_objective_and_evidence_and_conclusion(tmp_path, monkeyp
         True,                                    # conclude now? yes
         "concluded", "promote", "Rose nicely.", "Scale up.",
         True,                                    # result for objective "Rise"? yes
-        "met", "Above target",
+        "met", "5.4", "cm", "Above target",       # verdict, observed value, unit, reasoning
         ["ev1"],                                 # cited evidence
         True,                                    # commit now? yes
     ])
@@ -114,7 +116,10 @@ def test_action_new_with_objective_and_evidence_and_conclusion(tmp_path, monkeyp
     assert exp.evidence[0].id == "ev1"
     assert exp.conclusion.decision == "promote"
     assert exp.conclusion.next_steps == "Scale up."
-    assert exp.conclusion.objective_results[0].evidence_ids == ["ev1"]
+    result = exp.conclusion.objective_results[0]
+    assert result.evidence_ids == ["ev1"]
+    assert result.observed == Quantity(value=5.4, unit="cm")
+    assert result.reasoning == "Above target"
 
 
 def test_action_new_requires_title_and_intent(monkeypatch):
@@ -246,6 +251,52 @@ def test_action_graph_writes_html_without_opening_a_browser(tmp_path, monkeypatc
 
     assert out.exists()
     assert any("écrit" in line for line in printed)
+
+
+FORM = CommitForm.model_validate({
+    "title": "Formulaire de commit",
+    "fields": [
+        {"name": "operateur", "label": "Opérateur", "type": "string", "required": True},
+        {"name": "type_plan", "label": "Type de plan", "type": "choice", "choices": ["sweep", "confirmation"], "required": True},
+        {"name": "verifie", "label": "Vérifié ?", "type": "boolean", "required": True},
+    ],
+})
+
+
+def test_collect_form_answers_is_a_no_op_without_a_commit_form(tmp_path, monkeypatch):
+    printed = _script(monkeypatch, [])  # would fail loudly if any prompt were called
+    repo = Repository()
+    builder = repo.new(branch="main", structure=CakeRecipe.model_validate(json.loads(open(_cake_json(tmp_path)).read())), title="t", intent="i")
+    _collect_form_answers(repo, builder)
+    assert builder.form_answers == {}
+    assert printed == []
+
+
+def test_collect_form_answers_populates_the_builder(tmp_path, monkeypatch):
+    _script(monkeypatch, ["Alice", "confirmation", True])
+    repo = Repository(commit_form=FORM)
+    builder = repo.new(branch="main", structure=CakeRecipe.model_validate(json.loads(open(_cake_json(tmp_path)).read())), title="t", intent="i")
+    _collect_form_answers(repo, builder)
+    assert builder.form_answers == {"operateur": "Alice", "type_plan": "confirmation", "verifie": True}
+
+
+def test_action_new_with_a_configured_commit_form_prompts_and_commits_successfully(tmp_path, monkeypatch):
+    # this is the exact scenario that used to lose an entire filled-in wizard: a repo with a
+    # commit form configured, driven through _action_new, must actually get to answer it.
+    printed = _script(monkeypatch, [
+        "main", "v1", "test intent", "",
+        "examples.recipe.CakeRecipe", _cake_json(tmp_path),
+        False, False, False,             # objectives/evidence/conclude: no
+        "Alice", "sweep", False,          # commit form: operateur, type_plan, verifie
+        True,                              # commit now? yes
+    ])
+    repo = Repository(commit_form=FORM)
+    _action_new(repo)
+
+    assert len(repo) == 1
+    exp = next(iter(repo))
+    assert exp.form_answers == {"operateur": "Alice", "type_plan": "sweep", "verifie": False}
+    assert any("Committé" in line for line in printed)
 
 
 def test_run_menu_quits_immediately(tmp_path, monkeypatch):

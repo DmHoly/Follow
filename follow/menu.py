@@ -15,6 +15,14 @@ something a generic prompt wizard can build safely). What the menu adds interact
 is the parts with a fixed, known shape - objectives, evidence, conclusion - and for navigation:
 picking an experiment, a branch, or which diff paths to take in a merge, from an actual list
 instead of copying ids by hand.
+
+Every :func:`questionary.confirm` call below passes ``auto_enter=False`` - with the default
+``auto_enter=True``, confirm resolves the instant ``y``/``n`` is pressed and never reads the
+Enter keystroke that follows it out of habit (typing "y" then Enter is how confirmations work in
+most other CLIs); that stray Enter is left sitting in the terminal's input buffer and gets
+delivered to whatever prompt comes next, silently submitting it (an empty string for a text
+prompt, the highlighted item for a select) as if the user had answered without ever seeing it.
+``auto_enter=False`` makes confirm consume the Enter itself instead of leaking it forward.
 """
 
 from __future__ import annotations
@@ -28,6 +36,7 @@ from .cli import DEFAULT_REPO, _load_structure_class, _print_form_hint, _read_st
 from .diffing import DiffEntry
 from .graphing import render_graph_html
 from .models import Experiment
+from .quantity import Quantity
 from .rendering import render_fiche
 from .report import render_study_html
 from .repository import ExperimentBuilder, FollowError, Repository
@@ -62,7 +71,7 @@ def _pick_experiment(repo: Repository, message: str = "Quelle expérience ?") ->
 
 
 def _collect_objectives(builder: ExperimentBuilder) -> None:
-    while questionary.confirm("Ajouter un objectif ?", default=False).ask():
+    while questionary.confirm("Ajouter un objectif ?", default=False, auto_enter=False).ask():
         name = questionary.text("Nom de l'objectif :").ask()
         if not name:
             break
@@ -87,7 +96,7 @@ def _collect_objectives(builder: ExperimentBuilder) -> None:
 
 
 def _collect_evidence(builder: ExperimentBuilder) -> None:
-    while questionary.confirm("Ajouter une preuve ?", default=False).ask():
+    while questionary.confirm("Ajouter une preuve ?", default=False, auto_enter=False).ask():
         eid = questionary.text("Identifiant de la preuve :").ask()
         if not eid:
             break
@@ -97,7 +106,7 @@ def _collect_evidence(builder: ExperimentBuilder) -> None:
 
 
 def _collect_conclusion(builder: ExperimentBuilder) -> None:
-    if not questionary.confirm("Conclure maintenant ?", default=False).ask():
+    if not questionary.confirm("Conclure maintenant ?", default=False, auto_enter=False).ask():
         return
     status = questionary.select("Statut :", choices=["concluded", "running", "abandoned"]).ask()
     decision = questionary.select(
@@ -115,11 +124,15 @@ def _collect_conclusion(builder: ExperimentBuilder) -> None:
 
     objective_results = []
     for objective in builder.objectives:
-        if not questionary.confirm(f"Résultat pour l'objectif {objective.name!r} ?", default=True).ask():
+        if not questionary.confirm(f"Résultat pour l'objectif {objective.name!r} ?", default=True, auto_enter=False).ask():
             continue
         obj_status = questionary.select("Verdict :", choices=["met", "not_met", "partially_met", "inconclusive"]).ask()
+        observed_value = questionary.text(f"Valeur observée pour {objective.metric!r} (nombre, optionnel) :").ask()
+        observed_unit = questionary.text("Unité (optionnel) :").ask() if observed_value else None
         reasoning = questionary.text("Raisonnement (optionnel) :").ask()
         result: dict[str, Any] = {"objective": objective.name, "status": obj_status}
+        if observed_value:
+            result["observed"] = Quantity(value=float(observed_value), unit=observed_unit or None)
         if reasoning:
             result["reasoning"] = reasoning
         evidence_ids = [e.id for e in builder.evidence]
@@ -134,14 +147,41 @@ def _collect_conclusion(builder: ExperimentBuilder) -> None:
     builder.conclude(**kwargs)
 
 
+def _collect_form_answers(repo: Repository, builder: ExperimentBuilder) -> None:
+    """Prompt for the repository's commit form (see :mod:`follow.commit_form`), if one is
+    configured - skipped entirely for a repository with none. Without this, a repo with a
+    mandatory commit form would always reject the commit :func:`_finish` tries to make, with no
+    way to have answered it first.
+    """
+    if repo.commit_form is None:
+        return
+    questionary.print(f"Formulaire de commit requis : {repo.commit_form.title!r}", style="bold")
+    for field in repo.commit_form.fields:
+        current = builder.form_answers.get(field.name)
+        label = f"{field.label} ({'requis' if field.required else 'optionnel'})"
+        if field.type == "boolean":
+            value = questionary.confirm(label, default=bool(current), auto_enter=False).ask()
+        elif field.type == "choice":
+            default_choice = current if current in (field.choices or []) else None
+            value = questionary.select(label, choices=field.choices or [], default=default_choice).ask()
+        elif field.type == "number":
+            raw = questionary.text(label, default=str(current) if current is not None else "").ask()
+            value = float(raw) if raw else None
+        else:  # string / text
+            value = questionary.text(label, default=str(current) if current else "").ask()
+        if value not in (None, ""):
+            builder.answer_form(**{field.name: value})
+
+
 def _finish(repo: Repository, builder: ExperimentBuilder, *, default_out: str = "draft.json") -> None:
-    if questionary.confirm("Committer maintenant ?", default=True).ask():
+    _collect_form_answers(repo, builder)
+    if questionary.confirm("Committer maintenant ?", default=True, auto_enter=False).ask():
         experiment = builder.commit()
         questionary.print(f"Committé : {experiment.id}  ({experiment.branch})  {experiment.title}", style="bold fg:green")
         return
     out = questionary.path("Fichier de brouillon :", default=default_out).ask() or default_out
     out_path = Path(out)
-    if out_path.exists() and not questionary.confirm(f"{out_path} existe déjà, écraser ?", default=False).ask():
+    if out_path.exists() and not questionary.confirm(f"{out_path} existe déjà, écraser ?", default=False, auto_enter=False).ask():
         questionary.print("Annulé.", style="fg:yellow")
         return
     out_path.write_text(json.dumps(builder.to_draft(), indent=2, ensure_ascii=False))
@@ -211,7 +251,7 @@ def _action_derive(repo: Repository) -> None:
     new_branch = questionary.text("Nouvelle branche (vide pour continuer celle du parent) :").ask()
     structure_cls = _load_structure_class(parent.structure_type)
     structure = None
-    if questionary.confirm("Remplacer la structure héritée par un nouveau fichier JSON ?", default=False).ask():
+    if questionary.confirm("Remplacer la structure héritée par un nouveau fichier JSON ?", default=False, auto_enter=False).ask():
         structure_file = questionary.path("Fichier JSON de structure :").ask()
         if structure_file:
             structure = structure_cls.model_validate(_read_structure_payload(structure_file))
@@ -232,6 +272,7 @@ def _action_close_draft(repo: Repository) -> None:
     if builder.conclusion.status == "draft":
         questionary.print("Ce brouillon n'a pas encore de conclusion.", style="fg:yellow")
         _collect_conclusion(builder)
+    _collect_form_answers(repo, builder)
     experiment = builder.commit()
     questionary.print(f"Committé : {experiment.id}  ({experiment.branch})  {experiment.title}", style="bold fg:green")
 
@@ -287,7 +328,7 @@ def _action_report(repo: Repository) -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(render_study_html(repo), encoding="utf-8")
     questionary.print(f"Rapport écrit dans {out_path}.", style="fg:green")
-    if questionary.confirm("Ouvrir dans le navigateur ?", default=True).ask():
+    if questionary.confirm("Ouvrir dans le navigateur ?", default=True, auto_enter=False).ask():
         webbrowser.open(out_path.resolve().as_uri())
 
 
@@ -297,7 +338,7 @@ def _action_graph(repo: Repository) -> None:
         return
     out_path = render_graph_html(repo, Path(out))
     questionary.print(f"Graphe écrit dans {out_path}.", style="fg:green")
-    if questionary.confirm("Ouvrir dans le navigateur ?", default=True).ask():
+    if questionary.confirm("Ouvrir dans le navigateur ?", default=True, auto_enter=False).ask():
         webbrowser.open(out_path.resolve().as_uri())
 
 
