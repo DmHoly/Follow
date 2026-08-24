@@ -15,6 +15,7 @@ from .design import (
     sweep,
 )
 from .diffing import DiffEntry, StructureDiff, diff_structures
+from .entities import find_entity_mentions
 from .formatting import format_value, is_quantity_leaf
 from .graphing import build_graph_figure, render_graph_html
 from .merging import get_path, resolve_merge_paths, split_path
@@ -65,6 +66,7 @@ __all__ = [
     "check_identifiability",
     "diff_structures",
     "experiment_fiche",
+    "find_entity_mentions",
     "format_value",
     "fractional_factorial",
     "full_factorial",

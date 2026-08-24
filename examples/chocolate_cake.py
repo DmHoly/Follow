@@ -15,6 +15,7 @@ from follow import Quantity, Structure
 class ChocolateCake(Structure):
     name: str
     trial_id: int = 0  # only meaningful inside a CakeTrialBatch - identifies which trial this is
+    entity_id: str | None = None  # a name for the physical cake, e.g. "moule-vert" - see follow.entities
     dark_chocolate: Quantity
     cocoa_percent: Quantity
     butter: Quantity
@@ -24,6 +25,7 @@ class ChocolateCake(Structure):
     baking_powder: Quantity
     bake_temperature: Quantity
     bake_duration: Quantity
+    topping: str | None = None  # a modification made to one specific physical cake after baking
 
 
 class CakeTrialBatch(Structure):

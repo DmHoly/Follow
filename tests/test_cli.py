@@ -12,6 +12,16 @@ CAKE_STRUCT = {
 }
 
 
+def _chocolate_cake_struct(entity_id):
+    return {
+        "name": "Gateau", "trial_id": 0, "entity_id": entity_id,
+        "dark_chocolate": {"value": 200, "unit": "g"}, "cocoa_percent": {"value": 64, "unit": "%"},
+        "butter": {"value": 150, "unit": "g"}, "sugar": {"value": 180, "unit": "g"}, "eggs": 4,
+        "flour": {"value": 120, "unit": "g"}, "baking_powder": {"value": 5, "unit": "g"},
+        "bake_temperature": {"value": 180, "unit": "C"}, "bake_duration": {"value": 35, "unit": "min"},
+    }
+
+
 def _write_json(path: Path, data) -> str:
     path.write_text(json.dumps(data))
     return str(path)
@@ -539,3 +549,46 @@ def test_new_prints_a_hint_when_the_repository_has_a_commit_form(tmp_path, capsy
     payload["form_answers"] = {"operator": "Alice"}
     Path(draft).write_text(json.dumps(payload))
     assert main(["commit", draft, "--repo", repo_path]) == 0
+
+
+def _commit_chocolate_cake(tmp_path, repo_path, capsys, *, branch, title, entity_id):
+    struct_file = _write_json(tmp_path / f"{branch}-cake.json", _chocolate_cake_struct(entity_id))
+    draft = str(tmp_path / f"{branch}-draft.json")
+    main(
+        [
+            "new", "--repo", repo_path, "--branch", branch, "--title", title, "--intent", "start",
+            "--structure-type", "examples.chocolate_cake.ChocolateCake", "--structure-file", struct_file, "--out", draft,
+        ]
+    )
+    capsys.readouterr()
+    main(["commit", draft, "--repo", repo_path])
+    return capsys.readouterr().out.split()[0]
+
+
+def test_trace_reports_no_match_for_an_unmentioned_entity(tmp_path, capsys):
+    repo_path = str(tmp_path / "repo")
+    main(["init", repo_path])
+    capsys.readouterr()
+    _commit_chocolate_cake(tmp_path, repo_path, capsys, branch="main", title="v1", entity_id="moule-vert")
+
+    assert main(["trace", "inexistant", "--repo", repo_path]) == 0
+    out = capsys.readouterr().out
+    assert "aucune expérience" in out
+    assert "inexistant" in out
+
+
+def test_trace_links_two_unrelated_experiments_by_shared_entity_id(tmp_path, capsys):
+    # the physical-entity scenario: two branches, no parent/derive relationship between them,
+    # just the same entity_id string reused - `trace` must find both anyway.
+    repo_path = str(tmp_path / "repo")
+    main(["init", repo_path])
+    capsys.readouterr()
+    batch_id = _commit_chocolate_cake(tmp_path, repo_path, capsys, branch="main", title="Split moules", entity_id="moule-vert")
+    followup_id = _commit_chocolate_cake(tmp_path, repo_path, capsys, branch="moule-vert-nutella", title="Injection Nutella", entity_id="moule-vert")
+
+    assert main(["trace", "moule-vert", "--repo", repo_path]) == 0
+    out = capsys.readouterr().out
+    lines = [line for line in out.splitlines() if line.strip()]
+    assert len(lines) == 2
+    assert batch_id in lines[0] and "Split moules" in lines[0]
+    assert followup_id in lines[1] and "Injection Nutella" in lines[1]

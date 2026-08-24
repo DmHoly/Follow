@@ -79,6 +79,12 @@ follow.commit_form
 .. automodule:: follow.commit_form
    :members:
 
+follow.entities
+-------------------
+
+.. automodule:: follow.entities
+   :members:
+
 follow.ids
 -------------
 

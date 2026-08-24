@@ -7,6 +7,7 @@ from typing import Any, Iterable, Iterator
 
 from .commit_form import CommitForm, load_commit_form
 from .diffing import StructureDiff, diff_structures
+from .entities import find_entity_mentions
 from .ids import content_id
 from .merging import resolve_merge_paths
 from .models import Conclusion, Evidence, Experiment, Objective, ReferenceLink, Step
@@ -304,6 +305,21 @@ class Repository:
             [s.model_dump(mode="json") for s in a.steps],
             [s.model_dump(mode="json") for s in b.steps],
         )
+
+    def find_entity(self, entity_id: str) -> list[Experiment]:
+        """Every experiment in this repository that mentions the physical entity
+        ``entity_id`` (see :mod:`follow.entities`), oldest first.
+
+        This crosses branches and git lineage entirely: an experiment naming
+        ``entity_id="moule-vert"`` inside a batch, and a later, unrelated experiment that
+        just happens to reuse the same string in its own structure, both come back here -
+        no reference or parent link between them required. That's the point: name the
+        physical thing once, and every experiment that later mentions it is found by that
+        name alone, not by hand-maintained bookkeeping.
+        """
+        matches = [exp for exp in self._objects.values() if find_entity_mentions(exp.structure, entity_id)]
+        matches.sort(key=lambda exp: exp.created_at)
+        return matches
 
     # -- writing -------------------------------------------------------------------
 

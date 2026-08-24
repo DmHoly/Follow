@@ -110,6 +110,18 @@ Affiche la fiche complète d'une expérience (façon ``git show``) : intention, 
 Diff structurel entre deux expériences. ``--steps`` compare le protocole plutôt que la
 structure.
 
+``follow trace <entity_id>``
+---------------------------------
+
+Retrouve, tout branches et lignages confondus, chaque expérience qui mentionne la même entité
+physique (voir :doc:`entities`) — un ``entity_id`` posé quelque part dans la structure, sans
+référence ni parent git à poser à la main. Trié par date, avec le chemin où le nom a été trouvé
+dans chaque structure.
+
+.. code-block:: bash
+
+   follow trace moule-vert --repo mon_labo
+
 ``follow branch [nom]`` / ``follow tag [nom]``
 --------------------------------------------------
 

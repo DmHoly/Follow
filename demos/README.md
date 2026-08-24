@@ -36,6 +36,11 @@ principal) et `follow.render_study_html` — qui utilisent le même thème visue
   de deux améliorations validées séparément (`repo.merge`), un formulaire de commit obligatoire
   (`follow.commit_form`), et une validation finale. Voir `docs/tutorial.rst` pour le même
   scénario narré étape par étape.
+- `entity_tracking.py` — un split nomme chaque variante d'après un nom physique réel (le moule
+  utilisé, « moule vert »/« moule rouge »), puis deux expériences séparées — chacune sur sa
+  propre branche, sans parent ni référence rechargée — reprennent chacune un des deux noms.
+  `repo.find_entity(...)` (et `follow trace`) retrouvent le lien automatiquement, par le nom
+  seul. Voir `docs/entities.rst`.
 
 Régénérer une démo :
 

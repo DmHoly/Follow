@@ -104,6 +104,7 @@ bout en bout (`demos/chocolate_cake_optimization.py`).
 | `ReferenceLink` | Un point de comparaison (baseline, contrôle, littérature...), pas forcément un ancêtre. | — |
 | `StructureDiff` | Différence générique, calculée par introspection Pydantic, entre deux structures. | `git diff` |
 | `fiche` (Markdown) | Rendu humain d'une expérience : intention, structure, écarts vs référence, objectifs, preuves, conclusion. | `git show` |
+| `entity_id` / `find_entity` | Une même entité physique (moule, wafer...), retrouvée entre plusieurs expériences séparées par son nom, sans référence à poser. | — |
 
 Follow ne réutilise pas git en interne : les notions de version/branche/parenté sont
 réimplémentées spécifiquement pour ce domaine (voir `follow/repository.py`), avec des
@@ -340,6 +341,42 @@ check_identifiability(bad_split, ["implant_dose", "anneal_temperature"])
 ```
 
 Voir `docs/design.rst`.
+
+## Suivre une même entité physique entre plusieurs expériences (`follow trace`)
+
+Cas orthogonal au lignage git : un split nomme chaque variante avec un vrai nom physique — pas
+un id abstrait, le nom du moule utilisé (« moule vert », « moule rouge »...). Plus tard, sur le
+gâteau issu du moule vert spécifiquement, une **nouvelle expérience séparée** commence (injection
+de Nutella) — sans recharger de référence vers le split d'origine, juste en réutilisant le même
+nom. Follow retrouve automatiquement le lien.
+
+Donnez à n'importe quelle `Structure` (ou une sous-structure imbriquée, ex. une entrée de batch)
+un champ `entity_id: str | None`, et attribuez le même nom aux deux endroits :
+
+```python
+split = repo.new(branch="main", structure=CakeTrialBatch(batch_id="B1", trials=[
+    baseline.model_copy(update={"trial_id": 1, "entity_id": "moule-vert"}),
+    baseline.model_copy(update={"trial_id": 2, "entity_id": "moule-rouge"}),
+]), title="Split moules", intent="comparer 2 moules").commit()
+
+# plus tard, une expérience séparée - aucun parent ni référence vers `split` ci-dessus
+nutella = repo.new(branch="moule-vert-nutella", structure=baseline.model_copy(
+    update={"entity_id": "moule-vert", "name": "+ nutella"},
+), title="Injection Nutella", intent="ameliorer le moule vert").commit()
+
+repo.find_entity("moule-vert")
+# [<Experiment "Split moules">, <Experiment "Injection Nutella">]  <- triées par date, les deux
+```
+
+```bash
+follow trace moule-vert --repo mon_labo
+# exp_a1b2c3...  (main)                 Split moules       [concluded]  -- trials[0]
+# exp_d4e5f6...  (moule-vert-nutella)   Injection Nutella  [concluded]  -- (racine)
+```
+
+`repo.find_entity` parcourt le dépôt entier (toutes branches, tout lignage confondu) par la même
+technique de parcours générique que `follow.diffing`/`follow.batch` — aucune bookkeeping
+manuelle, aucune référence à poser. Voir `docs/entities.rst`.
 
 ## Formulaire de commit obligatoire
 

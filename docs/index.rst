@@ -50,6 +50,9 @@ Concepts
    * - :func:`~follow.batch.analyze_batch`
      - Une expérience, N variantes structurelles (DOE) : sépare la base commune des facteurs qui varient.
      - — (pas d'équivalent git)
+   * - :meth:`~follow.repository.Repository.find_entity`
+     - Une même entité physique (nommée via ``entity_id``), retrouvée entre plusieurs expériences séparées.
+     - — (pas d'équivalent git)
    * - :func:`~follow.design.full_factorial`
      - Génère les variantes d'un split (DOE) depuis une structure de référence, sans les recopier à la main.
      - — (pas d'équivalent git)
@@ -66,6 +69,7 @@ Concepts
    concepts
    merging
    batch
+   entities
    design
    commit_form
    report

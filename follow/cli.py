@@ -19,6 +19,7 @@ from pydantic import ValidationError
 
 from . import __version__
 from .batch import analyze_batch
+from .entities import find_entity_mentions
 from .formatting import format_value
 from .graphing import render_graph_html
 from .rendering import render_fiche, render_log
@@ -210,6 +211,19 @@ def cmd_show(args: argparse.Namespace) -> int:
         if reference.role == "baseline" and reference.experiment_id and reference.experiment_id in repo:
             _load_structure_class(repo.get(reference.experiment_id).structure_type)
     print(render_fiche(experiment, repo))
+    return 0
+
+
+def cmd_trace(args: argparse.Namespace) -> int:
+    repo = _repo(args.repo)
+    matches = repo.find_entity(args.entity_id)
+    if not matches:
+        print(f"aucune expérience ne mentionne l'entité {args.entity_id!r}")
+        return 0
+    for exp in matches:
+        paths = find_entity_mentions(exp.structure, args.entity_id)
+        where = ", ".join(p or "(racine)" for p in paths)
+        print(f"{exp.id}  ({exp.branch})  {exp.title}  [{exp.conclusion.status}]  -- {where}")
     return 0
 
 
@@ -472,6 +486,14 @@ def build_parser() -> argparse.ArgumentParser:
     add_repo_arg(p_show)
     p_show.add_argument("ref")
     p_show.set_defaults(func=cmd_show)
+
+    p_trace = subparsers.add_parser(
+        "trace",
+        help="retrouver toutes les expériences qui mentionnent une même entité physique (entity_id), tous branches et lignages confondus",
+    )
+    add_repo_arg(p_trace)
+    p_trace.add_argument("entity_id", help="nom donné à l'entité physique, ex. moule-vert")
+    p_trace.set_defaults(func=cmd_trace)
 
     p_diff = subparsers.add_parser("diff", help="diff structurel (ou de protocole) entre deux expériences")
     add_repo_arg(p_diff)
