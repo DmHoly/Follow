@@ -12,16 +12,34 @@ def _cake(flour_g: float) -> CakeRecipe:
     )
 
 
-def test_commit_computes_a_stable_content_id():
-    repo = Repository()
-    baseline = (
-        repo.new(branch="main", structure=_cake(200), title="Baseline vanilla cake", intent="Establish a reference bake")
+def _baseline(repo: Repository, *, flour_g: float = 200, title: str = "Baseline vanilla cake"):
+    return (
+        repo.new(branch="main", structure=_cake(flour_g), title=title, intent="Establish a reference bake")
         .add_objective(name="rise", metric="height_cm", direction="maximize", target=5.0)
         .commit()
     )
-    assert baseline.id.startswith("exp_")
-    assert baseline.parents == []
-    assert repo.get("main").id == baseline.id
+
+
+def test_commit_computes_a_stable_content_id():
+    # This test's name promised stability and content addressing; it used to assert only that the
+    # id started with "exp_", which an entirely random id would also satisfy. Both halves of the
+    # promise are checked now: same content, same id - different content, different id.
+    first = _baseline(Repository())
+    again = _baseline(Repository())
+    assert first.id == again.id
+
+    other_structure = _baseline(Repository(), flour_g=240)
+    other_title = _baseline(Repository(), title="Something else")
+    assert len({first.id, other_structure.id, other_title.id}) == 3
+
+    assert first.id.startswith("exp_")
+    assert first.parents == []
+
+
+def test_a_committed_id_survives_a_reload(tmp_path):
+    repo = Repository(tmp_path)
+    committed = _baseline(repo)
+    assert Repository(tmp_path).get("main").id == committed.id
 
 
 def test_derive_carries_over_config_and_adds_a_baseline_reference():

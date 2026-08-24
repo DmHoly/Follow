@@ -1,3 +1,4 @@
+from conftest import assert_well_formed_html
 from demos.entity_tracking import build_repository, render
 
 
@@ -33,6 +34,6 @@ def test_find_entity_links_the_split_and_its_followup_by_name_alone():
 def test_render_produces_a_well_formed_page():
     repo = build_repository()
     html = render(repo, embed_plotly=False)
-    assert html.count("<div") == html.count("</div>")
+    assert_well_formed_html(html)
     assert "<title>Suivre une entité physique</title>" in html
     assert "moule-vert" in html

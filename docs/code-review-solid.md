@@ -440,7 +440,7 @@ La suite est sérieuse — `test_misuse.py` en particulier teste de vrais scéna
 accesseurs. Le problème est ailleurs : ce qu'elle affirme couvrir et ce qu'elle vérifie réellement
 ne coïncident pas toujours.
 
-### TEST 1 — Une assertion garantie par le typage
+### TEST 1 — Une assertion garantie par le typage  ✅ corrigé
 
 `tests/test_multi_domain_coexistence.py:166`
 
@@ -453,7 +453,7 @@ assert kinds <= {"added", "removed", "changed"}
 valeur à la construction. L'assertion ne peut pas échouer, quel que soit le bug introduit dans
 `_walk`.
 
-### TEST 2 — `test_commit_computes_a_stable_content_id` : titre ≠ contenu
+### TEST 2 — `test_commit_computes_a_stable_content_id`  ✅ corrigé : titre ≠ contenu
 
 `tests/test_repository.py:15`
 
@@ -467,7 +467,7 @@ Ni stabilité, ni adressage par contenu : aucune de ces trois lignes ne change s
 UUID aléatoire. C'est précisément l'angle mort qui laisse passer le BUG 8 — un test nommé d'après
 une propriété que personne ne vérifie donne l'illusion qu'elle l'est.
 
-### TEST 3 — « HTML bien formé » = compter les `<div>` (6 occurrences)
+### TEST 3 — « HTML bien formé » = compter les `<div>`  ✅ corrigé (6 occurrences)
 
 `test_report.py:104`, `test_demo_*.py` (×4), `test_multi_domain:187`
 
@@ -480,7 +480,7 @@ passe ce test sans broncher. Voisins de la même famille : `assert "<style>" in 
 (`test_cli.py:501`) et `assert out.exists()` placé *après* `out.read_text()`
 (`test_graphing.py:45`), qui aurait déjà levé.
 
-### TEST 4 — Six comportements que rien ne couvre
+### TEST 4 — Six comportements que rien ne couvre  ✅ corrigé
 
 Une seule génération de `derive` est testée → **BUG 1**. `Repository.branch()` n'a aucun test de
 repointage → **BUG 6**. Aucun test de dépôt corrompu (refs orphelines, JSON tronqué) → **BUG 7**.
@@ -488,7 +488,7 @@ Aucun test d'échappement sur `render_page` ni sur le chemin `explode` → **BUG
 nom de facteur invalide dans `design` → **BUG 3**. `render_graph_html(embed=False)` (la branche
 CDN) n'est jamais exercée.
 
-### TEST 5 — Deux frictions structurelles
+### TEST 5 — Deux frictions structurelles  ⚠️ une corrigée, une infirmée
 
 **Le harnais du menu est positionnel.** `tests/test_menu.py:40` remplace chaque prompt
 `questionary` par une file de réponses consommée dans l'ordre d'appel. Insérer une question au
@@ -502,6 +502,32 @@ fichier, là où une fixture `scope="module"` suffirait.
 **Et le fond :** les tests de démo verrouillent des constantes narratives (`len(repo) == 11`,
 l'ensemble exact des branches). Enrichir une démo casse un test sans qu'aucun comportement de la
 bibliothèque n'ait changé.
+
+**Correctif (le harnais) :** la file reste positionnelle — c'est la nature d'un scénario de
+wizard — mais l'échec la rend lisible. Au lieu de « asked for more answers than the test
+scripted », le message nomme le prompt qui a manqué et rejoue tout ce qui a été répondu avant :
+
+```
+the action asked for an answer the test did not script: confirm('Conclure maintenant ?').
+Already answered, in order:
+  1. text('Branche :') -> 'main'
+  ...
+  8. confirm('Ajouter une preuve ?') -> False
+```
+
+Une question insérée au milieu d'une action pointe désormais sur elle-même, plus sur la fin de
+la file.
+
+**Constat infirmé (le coût) :** la mesure ne soutient pas le reproche. Les 17 tests de démo
+s'exécutent en 0,5 s au total, reconstructions comprises ; une fixture `scope="module"`
+partagerait un `Repository` mutable entre tests pour un gain non mesurable. Rien changé, à
+dessein.
+
+**Constat infirmé (les constantes narratives) :** reprocher à `len(repo) == 11` d'être coûteux à
+maintenir était théorique. Les démos ont depuis été modifiées deux fois — chemins `--take-steps`,
+extraction de `graph_section()` — sans qu'une seule de ces assertions ne casse à tort. Elles sont
+bon marché et attrapent les vraies régressions de démo : conservées.
+
 
 ---
 

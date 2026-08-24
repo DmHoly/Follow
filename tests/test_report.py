@@ -1,3 +1,4 @@
+from conftest import assert_well_formed_html
 from examples.recipe import BakeStep, CakeRecipe
 from follow import Quantity, Repository, render_study_html
 
@@ -101,5 +102,5 @@ def test_output_is_well_formed_html():
     repo.merge("main", feature_tip.id, title="Merge", intent="merge", take_structure=["ingredients.flour"]).commit()
 
     html = render_study_html(repo, embed_plotly=False)
-    assert html.count("<div") == html.count("</div>")
+    assert_well_formed_html(html)
     assert html.startswith("<title>")

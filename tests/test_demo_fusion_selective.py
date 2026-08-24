@@ -1,3 +1,4 @@
+from conftest import assert_well_formed_html
 from demos.fusion_selective import build_repository, render
 
 
@@ -18,7 +19,7 @@ def test_merge_took_only_the_baking_step_from_the_branch():
 def test_render_produces_a_well_formed_page():
     repo = build_repository()
     html = render(repo, embed_plotly=False)
-    assert html.count("<div") == html.count("</div>")
+    assert_well_formed_html(html)
     assert "<title>Fusion sélective</title>" in html
     assert merged_id(repo) in html
 

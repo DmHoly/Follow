@@ -1,3 +1,4 @@
+from conftest import assert_well_formed_html
 from follow import analyze_batch
 from follow.design import check_identifiability
 
@@ -98,8 +99,7 @@ def test_final_validation_batch_is_uniform():
 def test_render_produces_well_formed_html_covering_every_stage():
     repo = build_repository()
     html = render(repo, embed_plotly=False)
-    assert html.count("<div") == html.count("</div>")
-    assert html.count("<tr>") == html.count("</tr>")
+    assert_well_formed_html(html)
     assert html.startswith("<title>")
     for marker in ["Recette de reference", "Split manuel", "Split naif", "factoriel complet", "fractionnaire", "Latin Hypercube", "Fusion :", "recette-optimale"]:
         assert marker in html

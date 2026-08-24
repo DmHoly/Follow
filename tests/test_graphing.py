@@ -1,3 +1,5 @@
+import re
+
 import pytest
 
 from examples.recipe import BakeStep, CakeRecipe
@@ -41,13 +43,28 @@ def test_figure_has_one_node_per_experiment_and_two_branch_labels():
     assert set(branch_trace.text) == {"⌥ main", "⌥ less-sugar"}
 
 
-def test_render_graph_html_writes_a_self_contained_file(tmp_path):
-    repo, v1_id, v2_id, fork_id = _repo_with_a_fork()
+def test_render_graph_html_embeds_plotly_by_default(tmp_path):
+    repo, v1_id, _, _ = _repo_with_a_fork()
     out = render_graph_html(repo, tmp_path / "graph.html")
-    content = out.read_text()
-    assert out.exists()
-    assert "plotly" in content.lower()
+    content = out.read_text(encoding="utf-8")
+
+    # `assert out.exists()` used to sit here, after read_text() had already proved it.
+    # The bundled plotly.js mentions its own CDN URL in its source, so what distinguishes the two
+    # modes is whether the page *loads* from there - i.e. a <script src=...> pointing at it.
+    assert not re.search(r'<script[^>]+src="https://cdn\.plot\.ly', content)
+    assert out.stat().st_size > 1_000_000  # the library itself is in the file
     assert v1_id in content
+
+
+def test_render_graph_html_can_point_at_the_cdn_instead(tmp_path):
+    # the embed=False branch had no test at all, though it is what keeps a report light
+    repo, v1_id, _, _ = _repo_with_a_fork()
+    out = render_graph_html(repo, tmp_path / "graph.html", embed=False)
+    content = out.read_text(encoding="utf-8")
+
+    assert re.search(r'<script[^>]+src="https://cdn\.plot\.ly', content)
+    assert v1_id in content
+    assert out.stat().st_size < 200_000  # the embedded build is several megabytes
 
 
 # -- _depths: iterative, order-independent, and loud about a corrupt lineage --------------------
