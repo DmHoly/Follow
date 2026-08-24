@@ -130,6 +130,11 @@ dans chaque structure.
 
 Sans argument : liste les branches/tags. Avec un nom : crée ou déplace, ``--at REF`` requis.
 
+Créer une branche, ou l'avancer vers un descendant de sa pointe actuelle (*fast-forward*), est
+toujours accepté. La déplacer vers un commit dont sa pointe **ne descend pas** abandonnerait cet
+historique — toujours stocké, mais plus joignable par aucune branche — et est refusé, comme
+``follow commit`` refuse le même scénario. ``--force`` est l'échappatoire explicite.
+
 Branches et tags partagent un seul espace de noms : créer une branche du même nom qu'un tag
 existant (ou l'inverse) est refusé plutôt que de silencieusement rendre l'un des deux
 inaccessible par ce nom.

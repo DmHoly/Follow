@@ -27,6 +27,7 @@ from .formatting import format_value
 from .graphing import build_graph_figure
 from .merging import get_path, split_path
 from .models import Evidence, Experiment, Objective, ObjectiveResult
+from .repository import FollowError
 
 if TYPE_CHECKING:
     from .repository import Repository
@@ -896,7 +897,13 @@ def render_study_html(
       </div>
     </div>
   </section>"""
+    except FollowError:
+        # a corrupt lineage (a cycle) is a problem with the repository's data, not with drawing
+        # it - silently dropping the figure would hide the one thing the reader needs to know
+        raise
     except Exception:
+        # a rendering failure (plotly, the figure serialisation) costs the graph section and
+        # nothing else: the rest of the report is still worth producing
         graph_html = ""
 
     sections = [s for s in [_index_html(experiments), graph_html] if s]

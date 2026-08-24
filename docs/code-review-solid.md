@@ -4,9 +4,9 @@ Revue effectuée sur `302885a`, avec `pytest` au vert (221 tests).
 **Chaque bug des parties 1 et 2 a été reproduit par exécution sur le dépôt non modifié**, pas
 déduit à la lecture.
 
-> **État au commit suivant :** les BUG 1, 2, 3 et 4 sont **corrigés** (voir la partie 6, entrées
-> 1 à 4), chacun accompagné de tests de régression qui échouent sur le code d'origine. Les
-> BUG 5 à 14 restent ouverts et leurs constats ci-dessous sont toujours valables.
+> **État :** les BUG 1 à 6 sont **corrigés**, chacun accompagné de tests de régression qui
+> échouent sur le code d'avant correction. Les BUG 7 à 14 restent ouverts et leurs constats
+> ci-dessous sont toujours valables.
 
 Le socle est sain : modèles gelés, refus de commits qui abandonneraient un historique, messages
 d'erreur qui expliquent. Ce qui suit, ce sont les endroits où le code *ne dit rien* alors qu'il
@@ -131,7 +131,7 @@ preuve passent par `_evidence_link`, qui refuse les schémas `javascript:`/`data
 (reconnus même coupés par des caractères de contrôle) et affiche alors la preuve en texte
 plutôt que de la masquer. Six tests de régression, dont deux bout-en-bout sur la CLI.
 
-### BUG 5 — `follow graph` plante sur un dépôt profond, une fois sur deux
+### BUG 5 — `follow graph` plante sur un dépôt profond, une fois sur deux  ✅ corrigé
 
 `follow/graphing.py:20` — `_depths`
 
@@ -152,7 +152,15 @@ _depths({"a": ["b"], "b": ["a"]}) → {'a': 2, 'b': 1}
 irreproductible. Dans `follow report`, le `except Exception` de `report.py:856` avale l'erreur :
 le graphe disparaît de la page sans un mot. Un parcours itératif (tri topologique) règle les deux.
 
-### BUG 6 — `branch()` autorise ce que `commit()` refuse
+**Correctif :** `_depths` procède par parcours topologique (Kahn) au lieu de la récursion — la
+pile ne dépend plus ni de la profondeur du lignage ni de l'ordre du dict. Vérifié identique à
+l'ancien algorithme sur 200 DAG aléatoires (forks et merges compris) et tenu sur 20 000 commits
+dans l'ordre défavorable. Un cycle lève désormais un `FollowError` nommant les commits impliqués,
+au lieu de produire des profondeurs fausses ; et le `except Exception` de `render_study_html` a
+été resserré pour laisser passer cette erreur de données tout en continuant d'absorber un simple
+échec de rendu Plotly. Huit tests de régression.
+
+### BUG 6 — `branch()` autorise ce que `commit()` refuse  ✅ corrigé
 
 `follow/repository.py:492` — `Repository.branch`
 
@@ -168,6 +176,13 @@ log("main") == [a1]                 a2 devient injoignable
 
 **Effet :** la protection soigneusement écrite au commit se contourne par l'API publique voisine.
 Trois portes vers le même invariant, deux gardées.
+
+**Correctif :** `branch()` refuse de déplacer une branche existante vers un commit dont sa pointe
+actuelle ne descend pas, avec un message qui nomme le commit menacé et rappelle comment le
+préserver. Créer une branche et l'avancer en *fast-forward* restent libres — y compris à travers
+le second parent d'un merge, reconnu comme de la vraie filiation. `force=True` (et
+`follow branch --force`, ajouté par symétrie avec `follow tag --force`) est l'échappatoire
+explicite. Cinq tests de régression, plus un bout-en-bout sur la CLI.
 
 ---
 
@@ -433,8 +448,8 @@ lignes chacun et ferment les trous de test correspondants.
 | ✅ 2 | Valider les `update` de `design` contre `model_fields`, puis revalider le modèle. | BUG 3 |
 | ✅ 3 | Échapper dans `render_page`, filtrer les schémas d'URI des preuves, ajouter le test `explode`. | BUG 4 |
 | ✅ 4 | Séparer étiquettes et refs : `tags` ne crée plus de tag de dépôt. | BUG 2 |
-| 5 | Rendre `_depths` itératif ; écritures atomiques via `os.replace`. | BUG 5, 14 |
-| 6 | Vérifier l'existence de l'objet dans `_resolve_ref` ; aligner `branch()` sur les gardes de `commit()`. | BUG 6, 7 |
+| ✅ 5a | Rendre `_depths` itératif (fait). Écritures atomiques via `os.replace` : à faire. | BUG 5 ✅, 14 |
+| ✅ 6a | Aligner `branch()` sur les gardes de `commit()` (fait). Vérifier l'existence de l'objet dans `_resolve_ref` : à faire. | BUG 6 ✅, 7 |
 | 7 | Faire hériter toutes les erreurs de `FollowError`, puis simplifier les `except` de la CLI. | BUG 12 |
 | 8 | Extraire `graph_section()` et un `demo_main()` partagé ; supprimer les 12 copies. | DRY |
 | 9 | Extraire un `ObjectStore` derrière `Repository` — la condition pour que tout le reste devienne testable isolément. | SRP, DIP |

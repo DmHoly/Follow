@@ -286,7 +286,7 @@ def cmd_branch(args: argparse.Namespace) -> int:
     if args.at is None:
         return _fail("--at <ref> est requis pour créer/déplacer une branche")
     try:
-        repo.branch(args.name, args.at)
+        repo.branch(args.name, args.at, force=args.force)
     except FollowError as exc:
         return _fail(str(exc))
     print(f"branche '{args.name}' -> {repo.get(args.name).id}")
@@ -510,6 +510,11 @@ def build_parser() -> argparse.ArgumentParser:
     add_repo_arg(p_branch)
     p_branch.add_argument("name", nargs="?")
     p_branch.add_argument("--at", help="id/branche/tag à pointer")
+    p_branch.add_argument(
+        "--force",
+        action="store_true",
+        help="déplacer une branche existante vers un commit dont sa pointe ne descend pas (abandonne cet historique)",
+    )
     p_branch.set_defaults(func=cmd_branch)
 
     p_tag = subparsers.add_parser("tag", help="lister ou créer un tag")

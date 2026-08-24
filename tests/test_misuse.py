@@ -264,3 +264,67 @@ def test_reference_to_a_real_experiment_is_fine():
     builder.add_reference(role="benchmark", label="v1 for comparison", experiment_id=v1.id)
     committed = builder.commit()
     assert committed.references[0].experiment_id == v1.id
+
+
+def test_moving_a_branch_backwards_is_rejected_like_committing_over_its_tip():
+    # Regression: _commit refuses at length to move a branch onto a commit that would strand its
+    # tip, and tag() demands force= to repoint - but branch() wrote the pointer with no guard at
+    # all, so the same history could be abandoned through the neighbouring public method.
+    repo = Repository()
+    a1 = repo.new(branch="main", structure=_cake(), title="v1", intent="x").commit()
+    a2 = repo.derive(a1.id, title="v2", intent="x").commit()
+
+    with pytest.raises(FollowError, match="abandon"):
+        repo.branch("main", a1.id)
+
+    assert repo.branches["main"] == a2.id
+    assert [e.id for e in repo.log("main")] == [a2.id, a1.id]
+
+
+def test_moving_a_branch_sideways_onto_an_unrelated_line_is_rejected():
+    repo = Repository()
+    a1 = repo.new(branch="main", structure=_cake(), title="main-v1", intent="x").commit()
+    other = repo.new(branch="other", structure=_cake(220), title="other-v1", intent="x").commit()
+
+    with pytest.raises(FollowError, match="abandon"):
+        repo.branch("main", other.id)
+    assert repo.branches["main"] == a1.id
+
+
+def test_creating_a_branch_and_fast_forwarding_it_need_no_force():
+    repo = Repository()
+    a1 = repo.new(branch="main", structure=_cake(), title="v1", intent="x").commit()
+    a2 = repo.derive(a1.id, title="v2", intent="x").commit()
+
+    repo.branch("stable", a1.id)  # brand-new name: nothing to abandon
+    assert repo.branches["stable"] == a1.id
+
+    repo.branch("stable", a2.id)  # forward onto a descendant: nothing becomes unreachable
+    assert repo.branches["stable"] == a2.id
+
+    repo.branch("stable", a2.id)  # a no-op move is fine too
+    assert repo.branches["stable"] == a2.id
+
+
+def test_fast_forward_is_recognised_through_the_second_parent_of_a_merge():
+    # a merge commit descends from BOTH its parents; reaching the tip only through the second
+    # one is still real history, so moving the branch there loses nothing and must be allowed
+    repo = Repository()
+    a1 = repo.new(branch="main", structure=_cake(), title="v1", intent="x").commit()
+    side_builder = repo.derive(a1.id, new_branch="side", title="side", intent="x")
+    side_builder.structure.ingredients["flour"] = Quantity(value=300, unit="g")
+    side_tip = side_builder.commit()
+    merged = repo.merge("main", side_tip.id, title="merge", intent="x").commit()
+
+    repo.branch("side", merged.id)
+    assert repo.branches["side"] == merged.id
+
+
+def test_force_is_the_deliberate_escape_hatch_for_moving_a_branch():
+    repo = Repository()
+    a1 = repo.new(branch="main", structure=_cake(), title="v1", intent="x").commit()
+    a2 = repo.derive(a1.id, title="v2", intent="x").commit()
+
+    repo.branch("main", a1.id, force=True)
+    assert repo.branches["main"] == a1.id
+    assert a2.id in repo  # still stored, just no longer on the branch

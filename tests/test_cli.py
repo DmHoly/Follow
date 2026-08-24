@@ -642,3 +642,41 @@ def test_report_html_escapes_a_title_passed_on_the_command_line(tmp_path, capsys
     assert main(["report", "--repo", repo_path, "--title", "<script>alert(1)</script>",
                  "--out", str(out_file), "--no-embed"]) == 0
     assert "<script>alert(1)</script>" not in out_file.read_text()
+
+
+def test_branch_refuses_to_abandon_history_and_offers_force(tmp_path, capsys):
+    repo_path = str(tmp_path / "repo")
+    main(["init", repo_path])
+    capsys.readouterr()
+    struct_file = _write_json(tmp_path / "cake.json", CAKE_STRUCT)
+    draft = str(tmp_path / "v1.json")
+    main(
+        [
+            "new", "--repo", repo_path, "--branch", "main", "--title", "v1", "--intent", "start",
+            "--structure-type", "examples.recipe.CakeRecipe", "--structure-file", struct_file, "--out", draft,
+        ]
+    )
+    capsys.readouterr()
+    main(["commit", draft, "--repo", repo_path])
+    v1_id = capsys.readouterr().out.split()[0]
+
+    derive_draft = str(tmp_path / "v2.json")
+    main(["derive", v1_id, "--repo", repo_path, "--title", "v2", "--intent", "x", "--out", derive_draft])
+    capsys.readouterr()
+    main(["commit", derive_draft, "--repo", repo_path])
+    v2_id = capsys.readouterr().out.split()[0]
+
+    # rewinding main onto v1 would strand v2: a clean one-line error, not a traceback
+    assert main(["branch", "main", "--at", v1_id, "--repo", repo_path]) == 1
+    err = capsys.readouterr().err
+    assert err.startswith("erreur:")
+    assert "abandon" in err
+    assert "Traceback" not in err
+
+    from follow import Repository
+
+    assert Repository(repo_path).branches["main"] == v2_id  # untouched
+
+    # --force is the documented escape hatch, same as for tags
+    assert main(["branch", "main", "--at", v1_id, "--repo", repo_path, "--force"]) == 0
+    assert Repository(repo_path).branches["main"] == v1_id

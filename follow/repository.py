@@ -503,10 +503,53 @@ class Repository:
             builder.conclusion = Conclusion.model_validate(payload["conclusion"])
         return builder
 
-    def branch(self, name: str, at: str) -> None:
-        """Point branch ``name`` at the experiment resolved by ``at`` (id, branch, or tag)."""
+    def _descends_from(self, ancestor_id: str, descendant_id: str) -> bool:
+        """Is ``descendant_id`` ``ancestor_id`` itself, or one of its descendants?
+
+        Walks *every* parent line, not just the first the way :meth:`log` does: a commit reached
+        only through the second parent of a merge is still genuinely part of that history, and
+        treating it as unrelated would refuse a move that loses nothing.
+        """
+        seen: set[str] = set()
+        stack = [descendant_id]
+        while stack:
+            node = stack.pop()
+            if node == ancestor_id:
+                return True
+            if node in seen:
+                continue
+            seen.add(node)
+            experiment = self._objects.get(node)
+            if experiment is not None:
+                stack.extend(experiment.parents)
+        return False
+
+    def branch(self, name: str, at: str, *, force: bool = False) -> None:
+        """Point branch ``name`` at the experiment resolved by ``at`` (id, branch, or tag).
+
+        Creating a branch, or moving one forward onto a descendant of its current tip (git's
+        fast-forward), is always allowed - nothing becomes unreachable. Moving one *sideways or
+        backwards*, onto a commit its current tip does not descend from, would leave that tip
+        stranded: still stored, but no longer reachable from any branch via :meth:`log`. That is
+        the very thing :meth:`_commit` refuses to do, so it is refused here too, and needs the
+        same kind of deliberate opt-in :meth:`tag` asks for: ``force=True``.
+        """
         resolved = self._resolve_ref(at)
         self._ensure_branch_name_available(name)
+        current_tip_id = self._branches.get(name)
+        if (
+            current_tip_id is not None
+            and current_tip_id != resolved
+            and not force
+            and not self._descends_from(current_tip_id, resolved)
+        ):
+            raise FollowError(
+                f"branch {name!r} points at {current_tip_id}, which {resolved} does not descend "
+                f"from - moving it there would abandon that history (it would stay in the "
+                f"repository but no longer be reachable from any branch); tag {current_tip_id!r} "
+                "or point another branch at it first if you want to keep it, or pass force=True "
+                "to move anyway"
+            )
         self._branches[name] = resolved
         if self.path is not None:
             self._persist_refs()
