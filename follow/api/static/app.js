@@ -83,15 +83,18 @@ document.getElementById("entity-form").addEventListener("submit", (e) => {
 
 // -- log / detail views ----------------------------------------------------------------------
 
-async function showLog(ref) {
+const LOG_PAGE_SIZE = 25;
+
+async function showLog(ref, offset = 0) {
   state.activeRef = ref;
   clear(view);
   view.appendChild(el("h1", { text: `Historique — ${ref}` }));
+  const card = el("div", { class: "card" });
+  view.appendChild(card);
   try {
-    const commits = await get(`/api/log/${encodeURIComponent(ref)}`);
-    const card = el("div", { class: "card" });
-    if (commits.length === 0) card.appendChild(el("p", { class: "muted", text: "Aucune expérience." }));
-    for (const exp of commits) {
+    const page = await get(`/api/log/${encodeURIComponent(ref)}?offset=${offset}&limit=${LOG_PAGE_SIZE}`);
+    if (page.total === 0) card.appendChild(el("p", { class: "muted", text: "Aucune expérience." }));
+    for (const exp of page.items) {
       card.appendChild(el("div", {
         class: "log-entry",
         onclick: () => showExperiment(exp.id),
@@ -101,7 +104,20 @@ async function showLog(ref) {
         el("span", { class: "status", text: `[${exp.conclusion.status}]` }),
       ]));
     }
-    view.appendChild(card);
+
+    const shown = page.offset + page.items.length;
+    if (page.total > 0) {
+      const pager = el("div", { class: "toolbar" }, [
+        el("span", { class: "muted", text: `${shown} / ${page.total}` }),
+        offset > 0
+          ? el("button", { class: "secondary", text: "← précédent", onclick: () => showLog(ref, Math.max(0, offset - LOG_PAGE_SIZE)) })
+          : null,
+        shown < page.total
+          ? el("button", { class: "secondary", text: "suivant →", onclick: () => showLog(ref, offset + LOG_PAGE_SIZE) })
+          : null,
+      ]);
+      view.appendChild(pager);
+    }
   } catch (err) {
     showError(view, err);
   }
@@ -198,13 +214,43 @@ function buildSchemaField(node, defs, initial) {
   }
 
   if (type === "object" && !resolved.properties) {
-    // a free-form mapping (dict[str, X]) - no fixed field names to build inputs for, so fall
-    // back to raw JSON rather than guessing at keys.
-    const textarea = el("textarea", {});
-    textarea.value = JSON.stringify(initial !== undefined ? initial : {}, null, 2);
+    // a free-form mapping (dict[str, X]) - no fixed field names, but additionalProperties
+    // still says what *each value* looks like, so a key/value editor can build a proper
+    // field per entry instead of asking the user to hand-write JSON.
+    const valueSchema = typeof resolved.additionalProperties === "object" ? resolved.additionalProperties : {};
+    const list = el("div", {});
+    const rows = [];
+
+    function addRow(key, value) {
+      const keyInput = el("input", { type: "text", placeholder: "clé" });
+      keyInput.value = key || "";
+      const field = buildSchemaField(valueSchema, defs, value);
+      const row = el("div", { class: "array-item" }, [
+        el("button", { class: "remove", type: "button", text: "✕", onclick: () => { row.remove(); rows.splice(rows.indexOf(entry), 1); } }),
+        el("label", { text: "clé" }), keyInput,
+        field.element,
+      ]);
+      const entry = { row, keyInput, field };
+      rows.push(entry);
+      list.appendChild(row);
+    }
+
+    Object.entries(initial || {}).forEach(([k, v]) => addRow(k, v));
+
+    const wrap = el("div", {}, [
+      list,
+      el("button", { type: "button", class: "secondary", text: "+ ajouter une entrée", onclick: () => addRow() }),
+    ]);
     return {
-      element: textarea,
-      getValue: () => (textarea.value.trim() ? JSON.parse(textarea.value) : {}),
+      element: wrap,
+      getValue() {
+        const out = {};
+        for (const { keyInput, field } of rows) {
+          const key = keyInput.value.trim();
+          if (key) out[key] = field.getValue();
+        }
+        return out;
+      },
     };
   }
 
@@ -500,6 +546,10 @@ async function showNewExperimentForm() {
     e.preventDefault();
     clear(errorBox);
     const branch = branchSelect.value === "__new__" ? newBranchInput.value.trim() : branchSelect.value;
+    if (!branch) {
+      showError(errorBox, new Error("le nom de la branche est requis"));
+      return;
+    }
     try {
       const payload = {
         branch,

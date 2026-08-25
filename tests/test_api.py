@@ -81,7 +81,10 @@ def test_new_experiment_commits_and_is_readable(client):
     assert "# Essai 1" in resp.json()["fiche_markdown"]
 
     resp = client.get("/api/log/main")
-    assert len(resp.json()) == 1
+    body = resp.json()
+    assert body["total"] == 1
+    assert len(body["items"]) == 1
+    assert body["offset"] == 0
 
 
 def test_new_experiment_with_bad_structure_type_is_400(client):
@@ -109,6 +112,38 @@ def test_derive_carries_structure_and_adds_baseline_reference(client):
     assert child["branch"] == "main"
     baseline = next(r for r in child["references"] if r["role"] == "baseline")
     assert baseline["experiment_id"] == parent["id"]
+
+
+def test_log_pagination(client):
+    parent = client.post("/api/experiments", json=_new_payload()).json()["experiment"]
+    ref = parent["id"]
+    for i in range(4):
+        ref = client.post(
+            f"/api/experiments/{ref}/derive",
+            json={"title": f"Essai {i + 2}", "intent": "suite"},
+        ).json()["experiment"]["id"]
+    # 5 commits total on main now
+
+    resp = client.get("/api/log/main?limit=2")
+    body = resp.json()
+    assert body["total"] == 5
+    assert len(body["items"]) == 2
+    assert body["items"][0]["title"] == "Essai 5"  # newest first
+
+    resp = client.get("/api/log/main?offset=2&limit=2")
+    body = resp.json()
+    assert len(body["items"]) == 2
+    assert body["items"][0]["title"] == "Essai 3"
+
+    resp = client.get("/api/log/main?offset=4&limit=2")
+    assert len(resp.json()["items"]) == 1  # last page, shorter than limit
+
+    resp = client.get("/api/log/main?offset=100&limit=2")
+    assert resp.json()["items"] == []
+
+    assert client.get("/api/log/main?offset=-1").status_code == 422
+    assert client.get("/api/log/main?limit=0").status_code == 422
+    assert client.get("/api/log/main?limit=501").status_code == 422
 
 
 def test_derive_can_conclude_with_evidence_and_objective_results(client):

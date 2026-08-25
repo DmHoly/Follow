@@ -229,8 +229,23 @@ def create_app(
         return repo.commit_form.model_dump(mode="json")
 
     @app.get("/api/log/{ref}")
-    def log(ref: str) -> list[dict[str, Any]]:
-        return [exp.model_dump(mode="json") for exp in repo.log(ref)]
+    def log(ref: str, offset: int = 0, limit: int = 50) -> dict[str, Any]:
+        """A page of ``ref``'s history, newest first - ``repo.log`` itself has no notion of
+        paging (it always returns the full lineage), so the slicing happens here rather than
+        asking every caller of ``Repository.log`` to know about pages that only the GUI needs.
+        """
+        if offset < 0:
+            raise HTTPException(status_code=422, detail="offset doit être >= 0")
+        if limit < 1 or limit > 500:
+            raise HTTPException(status_code=422, detail="limit doit être entre 1 et 500")
+        history = repo.log(ref)
+        page = history[offset : offset + limit]
+        return {
+            "items": [exp.model_dump(mode="json") for exp in page],
+            "total": len(history),
+            "offset": offset,
+            "limit": limit,
+        }
 
     @app.get("/api/graph")
     def graph() -> dict[str, list[str]]:
