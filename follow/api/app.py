@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ValidationError
 
@@ -235,6 +235,17 @@ def create_app(
     @app.get("/api/graph")
     def graph() -> dict[str, list[str]]:
         return repo.graph()
+
+    @app.get("/api/graph.html", response_class=HTMLResponse)
+    def graph_html() -> str:
+        """The lineage graph as a self-contained Plotly page - the same figure `follow graph`
+        writes to a file, served directly so the GUI can embed it in an iframe.
+        """
+        from ..graphing import build_graph_figure
+
+        if len(repo) == 0:
+            return "<p style='font-family: sans-serif; padding: 1rem;'>Dépôt vide - rien à représenter.</p>"
+        return build_graph_figure(repo).to_html(include_plotlyjs=True, full_html=True)
 
     @app.get("/api/experiments/{ref:path}")
     def get_experiment(ref: str) -> dict[str, Any]:

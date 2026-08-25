@@ -12,10 +12,20 @@
     <div class="toolbar">
       <button id="btn-new">+ Nouvelle expérience</button>
     </div>
+    <div class="toolbar">
+      <button id="btn-graph" class="secondary">Graphe</button>
+      <button id="btn-merge" class="secondary">Fusionner</button>
+      <button id="btn-refs" class="secondary">Branches/tags</button>
+    </div>
     <h2>Branches</h2>
     <ul class="ref-list" id="branch-list"></ul>
     <h2>Tags</h2>
     <ul class="ref-list" id="tag-list"></ul>
+    <h2>Entité</h2>
+    <form id="entity-form">
+      <input type="text" id="entity-input" placeholder="entity_id">
+      <button type="submit" class="secondary" style="margin-top:0.4rem;">Tracer</button>
+    </form>
   </aside>
   <main id="main">
     <div id="view"></div>

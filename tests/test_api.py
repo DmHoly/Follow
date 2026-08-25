@@ -111,6 +111,35 @@ def test_derive_carries_structure_and_adds_baseline_reference(client):
     assert baseline["experiment_id"] == parent["id"]
 
 
+def test_derive_can_conclude_with_evidence_and_objective_results(client):
+    parent = client.post(
+        "/api/experiments",
+        json=_new_payload(objectives=[{"name": "rise", "metric": "height_cm", "direction": "maximize", "target": 5}]),
+    ).json()["experiment"]
+
+    resp = client.post(
+        f"/api/experiments/{parent['id']}/derive",
+        json={
+            "title": "Essai 1 - conclu",
+            "intent": "conclure sur l'essai précédent",
+            "structure": None,
+            "carry_objectives": True,
+            "evidence": [{"id": "photo-1", "description": "photo du gâteau", "source": "photo-1.jpg"}],
+            "conclusion": {
+                "status": "concluded",
+                "decision": "promote",
+                "summary": "le gâteau a bien levé",
+                "objective_results": [{"objective": "rise", "status": "met", "reasoning": "mesuré à 6cm"}],
+            },
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    child = resp.json()["experiment"]
+    assert child["conclusion"]["status"] == "concluded"
+    assert child["conclusion"]["objective_results"][0]["objective"] == "rise"
+    assert child["evidence"][0]["id"] == "photo-1"
+
+
 def test_derive_unknown_ref_is_404(client):
     resp = client.post(
         "/api/experiments/does-not-exist/derive",
@@ -191,6 +220,18 @@ def test_get_missing_experiment_is_404_with_plain_message(client):
     resp = client.get("/api/experiments/does-not-exist")
     assert resp.status_code == 404
     assert resp.json()["detail"] == "No experiment, branch or tag matches 'does-not-exist'"
+
+
+def test_graph_html_endpoint(client):
+    resp = client.get("/api/graph.html")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers["content-type"]
+    assert "vide" in resp.text  # empty repo -> placeholder message
+
+    client.post("/api/experiments", json=_new_payload())
+    resp = client.get("/api/graph.html")
+    assert resp.status_code == 200
+    assert "plotly" in resp.text.lower()
 
 
 def test_index_page_and_static_assets_are_served(client):
