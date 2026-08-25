@@ -43,7 +43,20 @@ def test_health_reports_repo_and_no_failed_imports(client, tmp_path):
     body = resp.json()
     assert body["status"] == "ok"
     assert body["experiments"] == 0
+    assert body["running"] == 0
+    assert body["completed"] == 0
+    assert body["branches"] == 0
     assert body["failed_structure_imports"] == []
+
+
+def test_health_counts_running_and_completed_experiments(client):
+    client.post("/api/experiments", json=_new_payload())  # default conclusion.status == "draft"
+    resp = client.get("/api/health")
+    body = resp.json()
+    assert body["experiments"] == 1
+    assert body["running"] == 1
+    assert body["completed"] == 0
+    assert body["branches"] == 1
 
 
 def test_structures_lists_registered_types_with_json_schema(client):
@@ -255,6 +268,71 @@ def test_get_missing_experiment_is_404_with_plain_message(client):
     resp = client.get("/api/experiments/does-not-exist")
     assert resp.status_code == 404
     assert resp.json()["detail"] == "No experiment, branch or tag matches 'does-not-exist'"
+
+
+def test_list_experiments_filters_by_status_across_branches(client):
+    running = client.post("/api/experiments", json=_new_payload(branch="main")).json()["experiment"]
+    other_branch = client.post(
+        "/api/experiments",
+        json=_new_payload(branch="side", title="Essai 2"),
+    ).json()["experiment"]
+    completed = client.post(
+        f"/api/experiments/{other_branch['id']}/derive",
+        json={
+            "title": "Essai 2 - conclu",
+            "intent": "conclure",
+            "conclusion": {"status": "concluded", "summary": "ok"},
+        },
+    ).json()["experiment"]
+
+    resp = client.get("/api/experiments?status=running")
+    body = resp.json()
+    ids = {item["id"] for item in body["items"]}
+    # both draft commits are "running": main's tip, and side's now-superseded first commit -
+    # /api/experiments lists every experiment in the repo, not just branch tips.
+    assert ids == {running["id"], other_branch["id"]}
+    assert body["total"] == 2
+
+    resp = client.get("/api/experiments?status=completed")
+    body = resp.json()
+    ids = {item["id"] for item in body["items"]}
+    assert ids == {completed["id"]}
+
+    resp = client.get("/api/experiments?status=all")
+    assert resp.json()["total"] == 3  # running + the draft other_branch tip + completed
+
+    assert client.get("/api/experiments?status=bogus").status_code == 422
+
+
+def test_list_experiments_pagination_and_ordering(client):
+    for i in range(3):
+        client.post("/api/experiments", json=_new_payload(branch=f"b{i}", title=f"Essai {i}"))
+    resp = client.get("/api/experiments?limit=2")
+    body = resp.json()
+    assert body["total"] == 3
+    assert len(body["items"]) == 2
+    assert body["items"][0]["title"] == "Essai 2"  # newest first
+
+
+def test_examples_endpoint_lists_only_existing_files(client):
+    resp = client.get("/api/examples")
+    assert resp.status_code == 200
+    for entry in resp.json():
+        assert "title" in entry and "description" in entry and "file" in entry
+
+
+def test_app_shell_served_for_deep_links(client):
+    for path in ("/app", "/app/en-cours", "/app/experience/some-id", "/app/graphe"):
+        resp = client.get(path)
+        assert resp.status_code == 200, path
+        assert "text/html" in resp.headers["content-type"]
+        assert 'id="view"' in resp.text
+
+
+def test_docs_route_exists(client):
+    resp = client.get("/docs")
+    # either the built Sphinx site (redirect to index) or the friendly "not built" fallback
+    assert resp.status_code in (200, 307, 404)
 
 
 def test_graph_html_endpoint(client):

@@ -18,11 +18,33 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--ink);
-  display: flex;
   min-height: 100vh;
 }
 
 a { color: var(--accent); }
+
+#layout { display: flex; flex-direction: column; min-height: 100vh; }
+
+#topnav {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.6rem 1rem;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+#topnav .brand { font-weight: 600; text-decoration: none; color: var(--ink); margin-right: 0.75rem; }
+#topnav button {
+  background: none; color: var(--muted); border: none; padding: 0.4rem 0.6rem;
+  border-radius: 6px; font-size: 0.85rem; cursor: pointer;
+}
+#topnav button:hover, #topnav button.active { background: var(--bg); color: var(--ink); }
+#topnav .navlink { margin-left: auto; font-size: 0.85rem; text-decoration: none; }
+
+#body { display: flex; flex: 1; min-height: 0; }
 
 #sidebar {
   width: 300px;
@@ -31,9 +53,10 @@ a { color: var(--accent); }
   border-right: 1px solid var(--border);
   padding: 1rem;
   overflow-y: auto;
-  height: 100vh;
+  align-self: flex-start;
   position: sticky;
-  top: 0;
+  top: 49px;
+  max-height: calc(100vh - 49px);
 }
 
 #main {
@@ -134,3 +157,13 @@ pre.fiche { white-space: pre-wrap; font-size: 0.85rem; background: var(--bg); pa
 .muted { color: var(--muted); }
 .row { display: flex; gap: 0.75rem; }
 .row > div { flex: 1; }
+
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 0.75rem; margin-bottom: 1.25rem; }
+.stat-tile { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 0.9rem 1rem; cursor: pointer; }
+.stat-tile:hover { border-color: var(--accent); }
+.stat-tile .n { font-size: 1.6rem; font-weight: 600; display: block; }
+.stat-tile .label { font-size: 0.78rem; color: var(--muted); }
+
+.example-card { display: block; text-decoration: none; color: inherit; }
+.example-card h3 { margin: 0 0 0.3rem; font-size: 0.95rem; color: var(--ink); }
+.example-card p { margin: 0; font-size: 0.82rem; color: var(--muted); line-height: 1.5; }

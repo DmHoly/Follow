@@ -29,6 +29,71 @@ from ..repository import Repository
 from ..structure import Structure
 
 STATIC_DIR = Path(__file__).parent / "static"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+DOCS_BUILD_DIR = REPO_ROOT / "docs" / "_build" / "html"
+EXAMPLES_DIR = REPO_ROOT / "demos" / "output"
+
+RUNNING_STATUSES = {"draft", "running"}
+COMPLETED_STATUSES = {"concluded", "abandoned"}
+
+# A small curated manifest of the demo reports under demos/output/ - see demos/README.md,
+# which these descriptions are lifted from. Listed here (rather than discovered generically)
+# so the "Exemples" page can show a title and a one-line description per report, not just a
+# bare filename; entries whose file does not actually exist (e.g. a wheel install with no
+# demos/ directory) are filtered out in the endpoint below rather than raising.
+EXAMPLES_MANIFEST = [
+    {
+        "file": "chocolate_cake_optimization.html",
+        "title": "Guide complet : optimisation d'un gâteau au chocolat",
+        "description": (
+            "Le scénario de bout en bout : intention, structure, référence et objectifs, un split "
+            "manuel puis factoriel, un plan fractionnaire, un screening, la fusion de deux "
+            "améliorations validées séparément, un formulaire de commit obligatoire et une "
+            "validation finale."
+        ),
+    },
+    {
+        "file": "fusion_selective.html",
+        "title": "Fusion sélective (l'équivalent de git merge)",
+        "description": (
+            "Une recette à 5 étapes, une branche de test qui explore la cuisson sur 3 commits, une "
+            "évolution indépendante sur main en parallèle, puis une fusion qui ne rapatrie que "
+            "l'étape validée - la résolution de conflit chemin par chemin."
+        ),
+    },
+    {
+        "file": "chocolate_fondant.html",
+        "title": "Optimisation d'un fondant au chocolat",
+        "description": (
+            "Dix recettes réelles synthétisées en une recette de référence, puis affinées par "
+            "plusieurs expériences ciblées."
+        ),
+    },
+    {
+        "file": "chocolate_fondant_auto_report.html",
+        "title": "Le même dépôt, en rapport 100% automatique",
+        "description": (
+            "Le même dépôt que ci-dessus, rendu par render_study_html sans aucune section écrite à "
+            "la main - à comparer avec la version narrée pour voir la différence."
+        ),
+    },
+    {
+        "file": "wafer_doe.html",
+        "title": "Plan factoriel 5×5 sur wafers",
+        "description": (
+            "Dose d'implantation × température de recuit sur 25 wafers, modélisé comme une seule "
+            "expérience, suivi d'un lot de confirmation homogène - vue explosée par entité."
+        ),
+    },
+    {
+        "file": "entity_tracking.html",
+        "title": "Suivi d'une entité physique",
+        "description": (
+            "Deux expériences sur des branches séparées, sans parent ni référence, reliées "
+            "automatiquement par le seul nom physique qu'elles partagent."
+        ),
+    },
+]
 
 
 def _message(exc: FollowError) -> str:
@@ -144,7 +209,10 @@ def create_app(
     repo = Repository(Path(repo_path))
     failed_imports = _import_known_structure_modules(repo, structure_modules)
 
-    app = FastAPI(title=title)
+    # docs_url/redoc_url disabled: FastAPI otherwise claims "/docs" itself for its interactive
+    # Swagger UI, which silently wins over our own "/docs" mount (the Sphinx site) below - the
+    # OpenAPI schema is still served at /openapi.json for anyone who wants it that way.
+    app = FastAPI(title=title, docs_url=None, redoc_url=None)
     app.state.repo = repo
     app.state.repo_path = str(Path(repo_path))
     app.state.failed_structure_imports = failed_imports
@@ -195,10 +263,15 @@ def create_app(
 
     @app.get("/api/health")
     def health() -> dict[str, Any]:
+        running = sum(1 for exp in repo if exp.conclusion.status in RUNNING_STATUSES)
+        completed = sum(1 for exp in repo if exp.conclusion.status in COMPLETED_STATUSES)
         return {
             "status": "ok",
             "repo": app.state.repo_path,
             "experiments": len(repo),
+            "running": running,
+            "completed": completed,
+            "branches": len(repo.branches),
             "failed_structure_imports": app.state.failed_structure_imports,
         }
 
@@ -246,6 +319,38 @@ def create_app(
             "offset": offset,
             "limit": limit,
         }
+
+    @app.get("/api/experiments")
+    def list_experiments(status: str = "all", offset: int = 0, limit: int = 50) -> dict[str, Any]:
+        """Every experiment in the repository (unlike ``/api/log/{ref}``, which is one branch's
+        first-parent lineage), newest first, optionally filtered by ``status``: ``running``
+        (conclusion.status is ``draft``/``running``) or ``completed`` (``concluded``/``abandoned``).
+        This is what backs the GUI's "en cours"/"terminées" dashboards.
+        """
+        if status not in ("all", "running", "completed"):
+            raise HTTPException(status_code=422, detail="status doit être 'all', 'running' ou 'completed'")
+        if offset < 0:
+            raise HTTPException(status_code=422, detail="offset doit être >= 0")
+        if limit < 1 or limit > 500:
+            raise HTTPException(status_code=422, detail="limit doit être entre 1 et 500")
+
+        wanted = RUNNING_STATUSES if status == "running" else COMPLETED_STATUSES if status == "completed" else None
+        matches = [exp for exp in repo if wanted is None or exp.conclusion.status in wanted]
+        matches.sort(key=lambda exp: exp.created_at, reverse=True)
+        page = matches[offset : offset + limit]
+        return {
+            "items": [exp.model_dump(mode="json") for exp in page],
+            "total": len(matches),
+            "offset": offset,
+            "limit": limit,
+        }
+
+    @app.get("/api/examples")
+    def list_examples() -> list[dict[str, str]]:
+        """The curated demo reports under demos/output/ that actually exist on this install -
+        see :data:`EXAMPLES_MANIFEST`. Each ``file`` is served at ``/examples-gallery/<file>``.
+        """
+        return [entry for entry in EXAMPLES_MANIFEST if (EXAMPLES_DIR / entry["file"]).exists()]
 
     @app.get("/api/graph")
     def graph() -> dict[str, list[str]]:
@@ -360,12 +465,42 @@ def create_app(
         return repo.tags
 
     # -- GUI --------------------------------------------------------------------------------
+    #
+    # "/" is a sober landing page; the actual app lives under "/app" and is a client-routed
+    # single-page app (see follow/api/static/app.js's router) - "/app" and every "/app/<path>"
+    # serve the very same shell, so a deep link (a bookmark, a page refresh, a link someone
+    # shares) lands on the right screen instead of a 404, with the JS router picking the route
+    # up from ``location.pathname`` once the page loads.
 
     if STATIC_DIR.exists():
         app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
         @app.get("/")
-        def index() -> FileResponse:
+        def landing() -> FileResponse:
+            return FileResponse(STATIC_DIR / "landing.html")
+
+        @app.get("/app")
+        @app.get("/app/{_client_route:path}")
+        def app_shell(_client_route: str = "") -> FileResponse:
             return FileResponse(STATIC_DIR / "index.html")
+
+    if DOCS_BUILD_DIR.exists():
+        app.mount("/docs", StaticFiles(directory=DOCS_BUILD_DIR, html=True), name="docs")
+    else:
+
+        @app.get("/docs", response_class=HTMLResponse)
+        def docs_not_built() -> str:
+            return (
+                "<!doctype html><meta charset='utf-8'><title>Documentation — Follow</title>"
+                "<body style='font-family: sans-serif; max-width: 40rem; margin: 3rem auto; padding: 0 1rem;'>"
+                "<h1>Documentation non construite</h1>"
+                "<p>Le site Sphinx n'a pas été construit sur cette installation. Depuis la racine du dépôt :</p>"
+                "<pre>pip install \".[docs]\"\nsphinx-build -b html docs docs/_build/html</pre>"
+                "<p>puis relancez <code>follow_api start</code> (ou <code>follow_api start --build-docs</code>).</p>"
+                "<p><a href='/'>← Retour</a></p></body>"
+            )
+
+    if EXAMPLES_DIR.exists():
+        app.mount("/examples-gallery", StaticFiles(directory=EXAMPLES_DIR), name="examples-gallery")
 
     return app

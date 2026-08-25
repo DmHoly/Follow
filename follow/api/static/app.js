@@ -46,11 +46,12 @@ function showError(container, err) {
 
 // -- app state -----------------------------------------------------------------------------
 
-const state = { branches: {}, tags: {}, activeRef: null };
+const state = { branches: {}, tags: {}, activeRef: null, health: null };
 const view = document.getElementById("view");
 
 async function refreshSidebar() {
   const health = await get("/api/health");
+  state.health = health;
   document.getElementById("repo-meta").textContent = `${health.repo} · ${health.experiments} expérience(s)`;
   state.branches = await get("/api/branches");
   state.tags = await get("/api/tags");
@@ -59,27 +60,114 @@ async function refreshSidebar() {
   clear(branchList);
   for (const name of Object.keys(state.branches).sort()) {
     branchList.appendChild(el("li", {}, [
-      el("button", { text: name, onclick: () => showLog(name) }),
+      el("button", { text: name, onclick: () => navigate(`/app/historique/${encodeURIComponent(name)}`) }),
     ]));
   }
   const tagList = document.getElementById("tag-list");
   clear(tagList);
   for (const name of Object.keys(state.tags).sort()) {
     tagList.appendChild(el("li", {}, [
-      el("button", { text: name, onclick: () => showLog(name) }),
+      el("button", { text: name, onclick: () => navigate(`/app/historique/${encodeURIComponent(name)}`) }),
     ]));
   }
 }
 
-document.getElementById("btn-new").addEventListener("click", () => showNewExperimentForm());
-document.getElementById("btn-graph").addEventListener("click", () => showGraph());
-document.getElementById("btn-merge").addEventListener("click", () => showMergeForm());
-document.getElementById("btn-refs").addEventListener("click", () => showRefsForm());
+document.getElementById("btn-new").addEventListener("click", () => navigate("/app/nouvelle"));
+document.getElementById("btn-merge").addEventListener("click", () => navigate("/app/fusionner"));
+document.getElementById("btn-refs").addEventListener("click", () => navigate("/app/refs"));
 document.getElementById("entity-form").addEventListener("submit", (e) => {
   e.preventDefault();
   const id = document.getElementById("entity-input").value.trim();
-  if (id) showEntityTrace(id);
+  if (id) navigate(`/app/entite/${encodeURIComponent(id)}`);
 });
+
+// -- router: real, bookmarkable URLs under /app -----------------------------------------------
+//
+// The server (see follow/api/app.py's app_shell) serves this same page for "/app" and every
+// "/app/<anything>", so a deep link, a page refresh or the browser's back/forward all land here
+// with the right URL already in place; this router reads that URL and renders the matching view.
+
+function navigate(path) {
+  if (location.pathname + location.search !== path) history.pushState({}, "", path);
+  router();
+}
+window.addEventListener("popstate", router);
+
+function setActiveNav(routeName) {
+  document.querySelectorAll("#topnav [data-route]").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.route === `/app/${routeName}` || (routeName === "" && btn.dataset.route === "/app"));
+  });
+}
+
+function router() {
+  const path = location.pathname.replace(/^\/app\/?/, "");
+  const params = new URLSearchParams(location.search);
+  const segments = path.split("/").filter(Boolean).map(decodeURIComponent);
+  setActiveNav(segments[0] || "");
+  clear(view);
+
+  if (segments.length === 0) return showDashboard();
+  if (segments[0] === "en-cours") return showExperimentsList("running", parseInt(params.get("offset") || "0", 10));
+  if (segments[0] === "terminees") return showExperimentsList("completed", parseInt(params.get("offset") || "0", 10));
+  if (segments[0] === "graphe") return showGraph();
+  if (segments[0] === "exemples") return showExamples();
+  if (segments[0] === "historique" && segments[1]) return showLog(segments[1], parseInt(params.get("offset") || "0", 10));
+  if (segments[0] === "experience" && segments[1]) return showExperiment(segments[1]);
+  if (segments[0] === "nouvelle") return showNewExperimentForm();
+  if (segments[0] === "deriver" && segments[1]) return showDeriveFormFor(segments[1]);
+  if (segments[0] === "fusionner") return showMergeForm();
+  if (segments[0] === "refs") return showRefsForm();
+  if (segments[0] === "entite" && segments[1]) return showEntityTrace(segments[1]);
+  view.appendChild(el("h1", { text: "Page introuvable" }));
+  view.appendChild(el("p", { class: "muted", text: `Aucune route ne correspond à /app/${path}.` }));
+}
+
+document.querySelectorAll("#topnav [data-route]").forEach((btn) => {
+  btn.addEventListener("click", () => navigate(btn.dataset.route));
+});
+
+// -- dashboard --------------------------------------------------------------------------------
+
+function showDashboard() {
+  view.appendChild(el("h1", { text: "Tableau de bord" }));
+  const health = state.health;
+  if (!health) return;
+
+  const grid = el("div", { class: "stat-grid" }, [
+    el("div", { class: "stat-tile", onclick: () => navigate("/app/en-cours") }, [
+      el("span", { class: "n", text: String(health.running) }),
+      el("span", { class: "label", text: "en cours" }),
+    ]),
+    el("div", { class: "stat-tile", onclick: () => navigate("/app/terminees") }, [
+      el("span", { class: "n", text: String(health.completed) }),
+      el("span", { class: "label", text: "terminées" }),
+    ]),
+    el("div", { class: "stat-tile", onclick: () => navigate("/app/graphe") }, [
+      el("span", { class: "n", text: String(health.experiments) }),
+      el("span", { class: "label", text: "expériences au total" }),
+    ]),
+    el("div", { class: "stat-tile", onclick: () => navigate("/app/refs") }, [
+      el("span", { class: "n", text: String(health.branches) }),
+      el("span", { class: "label", text: "branche(s)" }),
+    ]),
+  ]);
+  view.appendChild(grid);
+
+  view.appendChild(el("div", { class: "toolbar" }, [
+    el("button", { text: "+ Nouvelle expérience", onclick: () => navigate("/app/nouvelle") }),
+    el("button", { class: "secondary", text: "Graphe de filiation", onclick: () => navigate("/app/graphe") }),
+    el("button", { class: "secondary", text: "Exemples", onclick: () => navigate("/app/exemples") }),
+  ]));
+
+  if (health.failed_structure_imports && health.failed_structure_imports.length > 0) {
+    view.appendChild(el("div", { class: "error-box", text: `Modules de structure non importés : ${health.failed_structure_imports.join(", ")}` }));
+  }
+
+  const first = Object.keys(state.branches)[0];
+  if (!first) {
+    view.appendChild(el("p", { class: "muted", text: "Dépôt vide — créez une première expérience pour commencer." }));
+  }
+}
 
 // -- log / detail views ----------------------------------------------------------------------
 
@@ -97,7 +185,7 @@ async function showLog(ref, offset = 0) {
     for (const exp of page.items) {
       card.appendChild(el("div", {
         class: "log-entry",
-        onclick: () => showExperiment(exp.id),
+        onclick: () => navigate(`/app/experience/${encodeURIComponent(exp.id)}`),
       }, [
         el("span", { class: "id", text: exp.id.slice(0, 10) }),
         el("span", { text: exp.title }),
@@ -110,10 +198,10 @@ async function showLog(ref, offset = 0) {
       const pager = el("div", { class: "toolbar" }, [
         el("span", { class: "muted", text: `${shown} / ${page.total}` }),
         offset > 0
-          ? el("button", { class: "secondary", text: "← précédent", onclick: () => showLog(ref, Math.max(0, offset - LOG_PAGE_SIZE)) })
+          ? el("button", { class: "secondary", text: "← précédent", onclick: () => navigate(`/app/historique/${encodeURIComponent(ref)}?offset=${Math.max(0, offset - LOG_PAGE_SIZE)}`) })
           : null,
         shown < page.total
-          ? el("button", { class: "secondary", text: "suivant →", onclick: () => showLog(ref, offset + LOG_PAGE_SIZE) })
+          ? el("button", { class: "secondary", text: "suivant →", onclick: () => navigate(`/app/historique/${encodeURIComponent(ref)}?offset=${offset + LOG_PAGE_SIZE}`) })
           : null,
       ]);
       view.appendChild(pager);
@@ -131,8 +219,8 @@ async function showExperiment(id) {
     view.appendChild(el("h1", { text: exp.title }));
 
     const toolbar = el("div", { class: "toolbar" }, [
-      el("button", { text: "Dériver →", onclick: () => showDeriveForm(exp) }),
-      el("button", { class: "secondary", text: "← Historique", onclick: () => showLog(state.activeRef || exp.branch) }),
+      el("button", { text: "Dériver →", onclick: () => navigate(`/app/deriver/${encodeURIComponent(exp.id)}`) }),
+      el("button", { class: "secondary", text: "← Historique", onclick: () => navigate(`/app/historique/${encodeURIComponent(state.activeRef || exp.branch)}`) }),
     ]);
     view.appendChild(toolbar);
 
@@ -566,7 +654,7 @@ async function showNewExperimentForm() {
       };
       const result = await post("/api/experiments", payload);
       await refreshSidebar();
-      showExperiment(result.experiment.id);
+      navigate(`/app/experience/${result.experiment.id}`);
     } catch (err) {
       showError(errorBox, err);
     }
@@ -585,11 +673,20 @@ async function showNewExperimentForm() {
     commitFormField.element,
     el("div", { class: "toolbar" }, [
       el("button", { type: "submit", text: "Créer et committer" }),
-      el("button", { type: "button", class: "secondary", text: "Annuler", onclick: () => showLog(state.activeRef || Object.keys(state.branches)[0]) }),
+      el("button", { type: "button", class: "secondary", text: "Annuler", onclick: () => navigate(state.activeRef ? `/app/historique/${encodeURIComponent(state.activeRef)}` : (Object.keys(state.branches)[0] ? `/app/historique/${encodeURIComponent(Object.keys(state.branches)[0])}` : "/app")) }),
     ]),
   ]);
   view.appendChild(form);
   await loadStructureForm();
+}
+
+async function showDeriveFormFor(id) {
+  try {
+    const data = await get(`/api/experiments/${encodeURIComponent(id)}`);
+    return showDeriveForm(data.experiment);
+  } catch (err) {
+    showError(view, err);
+  }
 }
 
 async function showDeriveForm(parentExp) {
@@ -624,7 +721,7 @@ async function showDeriveForm(parentExp) {
       };
       const result = await post(`/api/experiments/${encodeURIComponent(parentExp.id)}/derive`, payload);
       await refreshSidebar();
-      showExperiment(result.experiment.id);
+      navigate(`/app/experience/${result.experiment.id}`);
     } catch (err) {
       showError(errorBox, err);
     }
@@ -641,7 +738,7 @@ async function showDeriveForm(parentExp) {
     commitFormField.element,
     el("div", { class: "toolbar" }, [
       el("button", { type: "submit", text: "Créer et committer" }),
-      el("button", { type: "button", class: "secondary", text: "Annuler", onclick: () => showExperiment(parentExp.id) }),
+      el("button", { type: "button", class: "secondary", text: "Annuler", onclick: () => navigate(`/app/experience/${encodeURIComponent(parentExp.id)}`) }),
     ]),
   ]);
   view.appendChild(form);
@@ -685,7 +782,7 @@ async function showMergeForm() {
       };
       const result = await post("/api/merge", payload);
       await refreshSidebar();
-      showExperiment(result.experiment.id);
+      navigate(`/app/experience/${result.experiment.id}`);
     } catch (err) {
       showError(errorBox, err);
     }
@@ -699,7 +796,7 @@ async function showMergeForm() {
     el("label", { text: "Étapes à prendre de B" }), takeStepsInput,
     el("div", { class: "toolbar" }, [
       el("button", { type: "submit", text: "Fusionner et committer" }),
-      el("button", { type: "button", class: "secondary", text: "Annuler", onclick: () => showLog(state.activeRef || Object.keys(state.branches)[0]) }),
+      el("button", { type: "button", class: "secondary", text: "Annuler", onclick: () => navigate(state.activeRef ? `/app/historique/${encodeURIComponent(state.activeRef)}` : (Object.keys(state.branches)[0] ? `/app/historique/${encodeURIComponent(Object.keys(state.branches)[0])}` : "/app")) }),
     ]),
   ]);
   view.appendChild(form);
@@ -747,7 +844,7 @@ async function showEntityTrace(entityId) {
     const card = el("div", { class: "card" });
     if (matches.length === 0) card.appendChild(el("p", { class: "muted", text: "Aucune expérience ne mentionne cette entité." }));
     for (const exp of matches) {
-      card.appendChild(el("div", { class: "log-entry", onclick: () => showExperiment(exp.id) }, [
+      card.appendChild(el("div", { class: "log-entry", onclick: () => navigate(`/app/experience/${encodeURIComponent(exp.id)}`) }, [
         el("span", { class: "id", text: exp.id.slice(0, 10) }),
         el("span", { text: exp.title }),
         el("span", { class: "status", text: `(${exp.branch})` }),
@@ -759,12 +856,71 @@ async function showEntityTrace(entityId) {
   }
 }
 
+// -- en cours / terminées (all-branches, filtered by status) --------------------------------
+
+const EXPERIMENTS_PAGE_SIZE = 25;
+
+async function showExperimentsList(status, offset = 0) {
+  const title = status === "running" ? "Expériences en cours" : "Expériences terminées";
+  view.appendChild(el("h1", { text: title }));
+  const card = el("div", { class: "card" });
+  view.appendChild(card);
+  try {
+    const page = await get(`/api/experiments?status=${status}&offset=${offset}&limit=${EXPERIMENTS_PAGE_SIZE}`);
+    if (page.total === 0) card.appendChild(el("p", { class: "muted", text: "Aucune expérience." }));
+    for (const exp of page.items) {
+      card.appendChild(el("div", {
+        class: "log-entry",
+        onclick: () => navigate(`/app/experience/${encodeURIComponent(exp.id)}`),
+      }, [
+        el("span", { class: "id", text: exp.id.slice(0, 10) }),
+        el("span", { text: exp.title }),
+        el("span", { class: "muted", text: exp.branch }),
+        el("span", { class: "status", text: `[${exp.conclusion.status}]` }),
+      ]));
+    }
+    const shown = page.offset + page.items.length;
+    if (page.total > 0) {
+      const route = status === "running" ? "en-cours" : "terminees";
+      view.appendChild(el("div", { class: "toolbar" }, [
+        el("span", { class: "muted", text: `${shown} / ${page.total}` }),
+        offset > 0
+          ? el("button", { class: "secondary", text: "← précédent", onclick: () => navigate(`/app/${route}?offset=${Math.max(0, offset - EXPERIMENTS_PAGE_SIZE)}`) })
+          : null,
+        shown < page.total
+          ? el("button", { class: "secondary", text: "suivant →", onclick: () => navigate(`/app/${route}?offset=${offset + EXPERIMENTS_PAGE_SIZE}`) })
+          : null,
+      ]));
+    }
+  } catch (err) {
+    showError(view, err);
+  }
+}
+
+// -- exemples ---------------------------------------------------------------------------------
+
+async function showExamples() {
+  view.appendChild(el("h1", { text: "Exemples" }));
+  view.appendChild(el("p", { class: "muted", text: "Scénarios complets, exécutés de bout en bout avec Follow et rendus en rapports HTML autonomes." }));
+  try {
+    const examples = await get("/api/examples");
+    if (examples.length === 0) {
+      view.appendChild(el("p", { class: "muted", text: "Aucun exemple disponible sur cette installation." }));
+      return;
+    }
+    for (const ex of examples) {
+      view.appendChild(el("a", { class: "card example-card", href: `/examples-gallery/${ex.file}`, target: "_blank", rel: "noopener" }, [
+        el("h3", { text: ex.title }),
+        el("p", { text: ex.description }),
+      ]));
+    }
+  } catch (err) {
+    showError(view, err);
+  }
+}
+
 // -- boot ------------------------------------------------------------------------------------
 
 refreshSidebar()
-  .then(() => {
-    const first = Object.keys(state.branches)[0];
-    if (first) showLog(first);
-    else view.appendChild(el("p", { class: "muted", text: "Dépôt vide — créez une première expérience." }));
-  })
+  .then(router)
   .catch((err) => showError(view, err));
