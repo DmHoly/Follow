@@ -49,3 +49,28 @@ def _walk(value: Any, path: str, entity_id: str, out: list[str]) -> None:
     if isinstance(value, list):
         for i, item in enumerate(value):
             _walk(item, f"{path}[{i}]", entity_id, out)
+
+
+def list_entity_ids(structure: Any) -> list[str]:
+    """Every distinct, non-empty ``entity_id`` value present anywhere in a dumped ``Structure``,
+    sorted. The mirror of :func:`find_entity_mentions`: that one answers "where does *this*
+    entity show up", this one answers "which entities does this structure name at all" - what a
+    GUI needs to surface an experiment's physical entities prominently (with a link to trace
+    each one) instead of leaving them buried in a nested JSON blob.
+    """
+    found: set[str] = set()
+    _collect(structure, found)
+    return sorted(found)
+
+
+def _collect(value: Any, out: set[str]) -> None:
+    if isinstance(value, dict):
+        entity_id = value.get("entity_id")
+        if entity_id:
+            out.add(entity_id)
+        for child in value.values():
+            _collect(child, out)
+        return
+    if isinstance(value, list):
+        for item in value:
+            _collect(item, out)

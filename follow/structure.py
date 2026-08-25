@@ -49,3 +49,13 @@ class Structure(BaseModel):
                 f"Unknown structure type {key!r}. Make sure the module defining it "
                 "has been imported before loading experiments that use it."
             ) from exc
+
+    @classmethod
+    def registered(cls) -> dict[str, type["Structure"]]:
+        """Every :class:`Structure` subclass imported so far, keyed by :meth:`registry_key`.
+
+        Used by things that need to enumerate *all* known structure types rather than resolve
+        one in particular - e.g. :mod:`follow.api`, to list them for a GUI's "new experiment"
+        form. Returns a copy: mutating it does not affect the registry.
+        """
+        return dict(_REGISTRY)

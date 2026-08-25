@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Follow</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/static/style.css">
+<style>
+  body { display: block; }
+  .landing { max-width: 46rem; margin: 0 auto; padding: 5rem 1.5rem 3rem; }
+  .landing .brand { font-size: 1.1rem; color: var(--muted); margin-bottom: 2rem; }
+  .landing h1 { font-size: 2.2rem; margin: 0 0 0.5rem; letter-spacing: -0.01em; }
+  .landing .tagline { font-size: 1.05rem; color: var(--muted); margin: 0 0 2.5rem; max-width: 34rem; }
+  .landing .cta { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 3rem; }
+  .landing .cta a.btn-primary {
+    background: var(--accent); color: var(--accent-ink); padding: 0.65rem 1.2rem;
+    border-radius: 8px; text-decoration: none; font-size: 0.9rem;
+  }
+  .landing .cta a.btn-secondary {
+    background: var(--panel); color: var(--ink); border: 1px solid var(--border);
+    padding: 0.65rem 1.2rem; border-radius: 8px; text-decoration: none; font-size: 0.9rem;
+  }
+  .landing .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 1rem; margin-bottom: 2.5rem; }
+  .landing .feature { border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.1rem; background: var(--panel); }
+  .landing .feature h3 { font-size: 0.9rem; margin: 0 0 0.35rem; }
+  .landing .feature p { font-size: 0.82rem; color: var(--muted); margin: 0; line-height: 1.5; }
+  .landing footer { font-size: 0.8rem; color: var(--muted); border-top: 1px solid var(--border); padding-top: 1.25rem; }
+  .landing footer a { color: var(--muted); }
+</style>
+</head>
+<body>
+  <div class="landing">
+    <div class="brand">🧪 Follow</div>
+    <h1>Suivi façon git pour les expériences scientifiques.</h1>
+    <p class="tagline">
+      Intention, structure, preuves et conclusions - versionnées, comparables et fusionnables
+      comme du code. Une bibliothèque Python, une CLI, et cette interface pour la consulter et
+      la piloter sans terminal.
+    </p>
+    <div class="cta">
+      <a class="btn-primary" href="/app">Ouvrir l'application</a>
+      <a class="btn-secondary" href="/docs">Documentation</a>
+      <a class="btn-secondary" href="/app/exemples">Exemples</a>
+      <a class="btn-secondary" href="https://github.com/DmHoly/Follow">GitHub</a>
+    </div>
+
+    <div class="features">
+      <div class="feature">
+        <h3>Branches &amp; commits</h3>
+        <p>Chaque expérience est un commit immuable ; dérivez, comparez, fusionnez deux lignes de travail comme avec git.</p>
+      </div>
+      <div class="feature">
+        <h3>Diff structurel</h3>
+        <p>Comparez deux expériences paramètre par paramètre, automatiquement, sans rien maintenir à la main.</p>
+      </div>
+      <div class="feature">
+        <h3>Lignage &amp; entités</h3>
+        <p>Visualisez le graphe de filiation, et retrouvez toute expérience mentionnant une entité physique donnée.</p>
+      </div>
+      <div class="feature">
+        <h3>Formulaires typés</h3>
+        <p>Chaque type de structure expose son schéma : l'interface génère le formulaire de saisie automatiquement.</p>
+      </div>
+    </div>
+
+    <footer>
+      Servi localement par <code>follow_api</code>. <a href="/api/health">État de l'API</a> ·
+      <a href="/docs">Documentation Sphinx</a>
+    </footer>
+  </div>
+</body>
+</html>

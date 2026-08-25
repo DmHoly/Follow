@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Follow</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div id="layout">
+    <nav id="topnav">
+      <a href="/" class="brand">🧪 Follow</a>
+      <button data-route="/app">Tableau de bord</button>
+      <button data-route="/app/en-cours">En cours</button>
+      <button data-route="/app/terminees">Terminées</button>
+      <button data-route="/app/graphe">Graphe</button>
+      <button data-route="/app/exemples">Exemples</button>
+      <a href="/docs" class="navlink">Documentation</a>
+    </nav>
+    <div id="body">
+      <aside id="sidebar">
+        <div class="repo-meta" id="repo-meta">chargement…</div>
+        <div class="toolbar">
+          <button id="btn-new">+ Nouvelle expérience</button>
+        </div>
+        <div class="toolbar">
+          <button id="btn-merge" class="secondary">Fusionner</button>
+          <button id="btn-refs" class="secondary">Branches/tags</button>
+        </div>
+        <h2>Branches</h2>
+        <ul class="ref-list" id="branch-list"></ul>
+        <h2>Tags</h2>
+        <ul class="ref-list" id="tag-list"></ul>
+        <h2>Entité</h2>
+        <form id="entity-form">
+          <input type="text" id="entity-input" placeholder="entity_id">
+          <button type="submit" class="secondary" style="margin-top:0.4rem;">Tracer</button>
+        </form>
+      </aside>
+      <main id="main">
+        <div id="view"></div>
+      </main>
+    </div>
+  </div>
+  <script src="/static/app.js"></script>
+</body>
+</html>
