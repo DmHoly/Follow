@@ -461,3 +461,222 @@ def test_cli_logs_prints_log_path(capsys):
     server = pytest.importorskip("follow.api.server")
     assert cli.main(["logs"]) == 0
     assert str(server.LOG_FILE) in capsys.readouterr().out
+
+
+# -- entity_id, DOE generation, batch/split matrix ---------------------------------------------
+
+WAFER_STRUCTURE_TYPE = "examples.wafer_doe.WaferLot"
+
+
+@pytest.fixture()
+def wafer_client(tmp_path):
+    app = create_app(tmp_path / "repo", structure_modules=["examples.wafer_doe", "examples.chocolate_cake"])
+    return TestClient(app)
+
+
+def _wafer(slot, dose, temp, duration=30):
+    return {
+        "slot": slot,
+        "implant_dose": {"value": dose, "unit": "cm-2"},
+        "anneal_temperature": {"value": temp, "unit": "C"},
+        "anneal_duration": {"value": duration, "unit": "min"},
+    }
+
+
+def test_experiment_payload_includes_entity_ids(wafer_client):
+    resp = wafer_client.post("/api/experiments", json={
+        "branch": "main",
+        "structure_type": "examples.chocolate_cake.ChocolateCake",
+        "structure": {
+            "name": "essai", "trial_id": 1, "entity_id": "moule-vert",
+            "dark_chocolate": {"value": 200, "unit": "g"}, "cocoa_percent": {"value": 70, "unit": "%"},
+            "butter": {"value": 100, "unit": "g"}, "sugar": {"value": 150, "unit": "g"}, "eggs": 3,
+            "flour": {"value": 50, "unit": "g"}, "baking_powder": {"value": 2, "unit": "g"},
+            "bake_temperature": {"value": 180, "unit": "C"}, "bake_duration": {"value": 25, "unit": "min"},
+        },
+        "title": "Essai moule vert", "intent": "entity_id",
+    })
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["entity_ids"] == ["moule-vert"]
+
+
+def test_experiment_payload_reports_batch_fields_only_when_multiple_entities(wafer_client):
+    single = wafer_client.post("/api/experiments", json={
+        "branch": "main", "structure_type": WAFER_STRUCTURE_TYPE,
+        "structure": {"lot_id": "L1", "wafer_diameter": {"value": 200, "unit": "mm"}, "process": "P", "wafers": [_wafer(1, 1e13, 900)]},
+        "title": "un seul wafer", "intent": "x",
+    })
+    assert single.json()["batch_fields"] == []  # a single-entity list isn't a "split" worth showing
+
+    multi = wafer_client.post("/api/experiments", json={
+        "branch": "side", "structure_type": WAFER_STRUCTURE_TYPE,
+        "structure": {"lot_id": "L2", "wafer_diameter": {"value": 200, "unit": "mm"}, "process": "P", "wafers": [_wafer(1, 1e13, 900), _wafer(2, 1e14, 950)]},
+        "title": "deux wafers", "intent": "x",
+    })
+    assert multi.json()["batch_fields"] == ["wafers"]
+
+
+def test_batch_fields_endpoint_finds_list_of_structure_field(wafer_client):
+    resp = wafer_client.get(f"/api/structures/{WAFER_STRUCTURE_TYPE}/batch-fields")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body) == 1
+    assert body[0]["field"] == "wafers"
+    assert body[0]["entity_type"] == "examples.wafer_doe.Wafer"
+    assert body[0]["entity_schema"]["title"] == "Wafer"
+
+
+def test_batch_fields_endpoint_empty_for_a_type_with_no_batch_field(client):
+    resp = client.get(f"/api/structures/{STRUCTURE_TYPE}/batch-fields")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+def test_design_generate_full_factorial(wafer_client):
+    payload = {
+        "structure_type": WAFER_STRUCTURE_TYPE,
+        "field": "wafers",
+        "reference": _wafer(0, 1e13, 900),
+        "plan": {
+            "type": "full_factorial",
+            "id_field": "slot",
+            "factors": {
+                "implant_dose": [{"value": 1e13, "unit": "cm-2"}, {"value": 1e14, "unit": "cm-2"}],
+                "anneal_temperature": [{"value": 900, "unit": "C"}, {"value": 950, "unit": "C"}],
+            },
+        },
+    }
+    resp = wafer_client.post("/api/design/generate", json=payload)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert len(body["variants"]) == 4  # 2x2
+    assert [v["slot"] for v in body["variants"]] == [1, 2, 3, 4]  # auto-numbered by id_field
+    assert body["variation"]["entity_count"] == 4
+    varying_paths = {f["path"] for f in body["variation"]["varying"]}
+    assert varying_paths == {"implant_dose", "anneal_temperature"}
+    assert "anneal_duration" in body["variation"]["constant"]
+
+
+def test_design_generate_sweep(wafer_client):
+    payload = {
+        "structure_type": WAFER_STRUCTURE_TYPE,
+        "field": "wafers",
+        "reference": _wafer(0, 1e13, 900),
+        "plan": {"type": "sweep", "field": "anneal_temperature", "values": [
+            {"value": 900, "unit": "C"}, {"value": 925, "unit": "C"}, {"value": 950, "unit": "C"},
+        ]},
+    }
+    resp = wafer_client.post("/api/design/generate", json=payload)
+    assert resp.status_code == 200, resp.text
+    assert len(resp.json()["variants"]) == 3
+
+
+def test_design_generate_latin_hypercube(wafer_client):
+    payload = {
+        "structure_type": WAFER_STRUCTURE_TYPE,
+        "field": "wafers",
+        "reference": _wafer(0, 1e13, 900),
+        "plan": {
+            "type": "latin_hypercube",
+            "id_field": "slot",
+            "n": 5,
+            "seed": 42,
+            "factor_ranges": {"anneal_temperature": [850, 950, "C"]},
+        },
+    }
+    resp = wafer_client.post("/api/design/generate", json=payload)
+    assert resp.status_code == 200, resp.text
+    assert len(resp.json()["variants"]) == 5
+
+
+def test_design_generate_full_factorial_is_never_confounded(wafer_client):
+    # A full factorial crosses every combination of every factor by construction, so
+    # check_identifiability should always come back clean for one - this is the positive control
+    # confirming the check actually ran (see test_design_generate_full_factorial for the split
+    # itself).
+    payload = {
+        "structure_type": WAFER_STRUCTURE_TYPE,
+        "field": "wafers",
+        "reference": _wafer(0, 1e13, 900),
+        "plan": {
+            "type": "full_factorial",
+            "factors": {
+                "anneal_temperature": [{"value": 900, "unit": "C"}, {"value": 950, "unit": "C"}],
+                "anneal_duration": [{"value": 30, "unit": "min"}, {"value": 60, "unit": "min"}],
+            },
+        },
+    }
+    resp = wafer_client.post("/api/design/generate", json=payload)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["identifiability"] == []
+
+
+def test_design_generate_fractional_factorial_flags_confounded_factors(wafer_client):
+    # A 2^(3-1) fractional factorial with D = A*B*C aliases D with the ABC interaction - the
+    # textbook confounding fractional_factorial trades away run count for.
+    payload = {
+        "structure_type": WAFER_STRUCTURE_TYPE,
+        "field": "wafers",
+        "reference": _wafer(0, 1e13, 900),
+        "plan": {
+            "type": "fractional_factorial",
+            "factors": {
+                "implant_dose": [1e13, 1e14, "cm-2"],
+                "anneal_temperature": [900, 950, "C"],
+                "anneal_duration": [30, 60, "min"],
+            },
+            "generators": {"anneal_duration": ["implant_dose", "anneal_temperature"]},
+        },
+    }
+    resp = wafer_client.post("/api/design/generate", json=payload)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert len(body["variants"]) == 4  # 2^(3-1)
+    assert body["resolution"] == 3
+    assert "anneal_duration" in body["aliases"]["anneal_temperature:implant_dose"]
+
+
+def test_design_generate_unknown_field_is_400(wafer_client):
+    resp = wafer_client.post("/api/design/generate", json={
+        "structure_type": WAFER_STRUCTURE_TYPE, "field": "not_a_field",
+        "reference": _wafer(0, 1e13, 900), "plan": {"type": "sweep", "field": "slot", "values": [1, 2]},
+    })
+    assert resp.status_code == 400
+
+
+def test_design_generate_unknown_structure_type_is_404(wafer_client):
+    resp = wafer_client.post("/api/design/generate", json={
+        "structure_type": "nope.Nope", "field": "wafers",
+        "reference": {}, "plan": {"type": "sweep", "field": "x", "values": []},
+    })
+    assert resp.status_code == 404
+
+
+def test_experiment_batch_endpoint_matches_follow_explode(wafer_client):
+    created = wafer_client.post("/api/experiments", json={
+        "branch": "main", "structure_type": WAFER_STRUCTURE_TYPE,
+        "structure": {
+            "lot_id": "L3", "wafer_diameter": {"value": 200, "unit": "mm"}, "process": "P",
+            "wafers": [_wafer(1, 1e13, 900), _wafer(2, 1e14, 950), _wafer(3, 1e13, 950)],
+        },
+        "title": "lot", "intent": "x",
+    }).json()["experiment"]
+
+    resp = wafer_client.get(f"/api/experiments/{created['id']}/batch/wafers")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["field"] == "wafers"
+    assert body["variation"]["entity_count"] == 3
+    varying_paths = {f["path"] for f in body["variation"]["varying"]}
+    assert varying_paths == {"slot", "implant_dose", "anneal_temperature"}
+
+
+def test_experiment_batch_endpoint_unknown_field_is_400(wafer_client):
+    created = wafer_client.post("/api/experiments", json={
+        "branch": "main", "structure_type": WAFER_STRUCTURE_TYPE,
+        "structure": {"lot_id": "L4", "wafer_diameter": {"value": 200, "unit": "mm"}, "process": "P", "wafers": [_wafer(1, 1e13, 900)]},
+        "title": "lot", "intent": "x",
+    }).json()["experiment"]
+
+    resp = wafer_client.get(f"/api/experiments/{created['id']}/batch/not_a_field")
+    assert resp.status_code == 400

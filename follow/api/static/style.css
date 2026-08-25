@@ -136,7 +136,9 @@ fieldset { border: 1px solid var(--border); border-radius: 8px; margin-top: 0.75
 legend { font-size: 0.8rem; color: var(--muted); padding: 0 0.3rem; }
 
 .array-item { border-left: 2px solid var(--border); padding-left: 0.6rem; margin-bottom: 0.5rem; position: relative; }
-.array-item .remove { position: absolute; right: 0; top: 0; background: none; color: var(--removed); padding: 0.1rem 0.4rem; }
+.array-item .remove { position: absolute; right: 0; top: 0; background: none; color: var(--removed); padding: 0.1rem 0.4rem; z-index: 1; }
+.array-item > details.collapsible { margin-top: 0; }
+.array-item > details.collapsible > summary { padding-right: 1.8rem; }
 
 .toolbar { display: flex; gap: 0.5rem; margin: 0.75rem 0; flex-wrap: wrap; }
 
@@ -167,3 +169,45 @@ pre.fiche { white-space: pre-wrap; font-size: 0.85rem; background: var(--bg); pa
 .example-card { display: block; text-decoration: none; color: inherit; }
 .example-card h3 { margin: 0 0 0.3rem; font-size: 0.95rem; color: var(--ink); }
 .example-card p { margin: 0; font-size: 0.82rem; color: var(--muted); line-height: 1.5; }
+
+details.collapsible {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-top: 0.9rem;
+  background: var(--panel);
+  overflow: hidden;
+}
+details.collapsible > summary {
+  padding: 0.6rem 0.9rem;
+  cursor: pointer;
+  font-size: 0.88rem;
+  font-weight: 600;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  user-select: none;
+}
+details.collapsible > summary::-webkit-details-marker { display: none; }
+details.collapsible > summary::before { content: "▸"; color: var(--muted); font-size: 0.7rem; transition: transform 0.1s; }
+details.collapsible[open] > summary::before { transform: rotate(90deg); }
+details.collapsible > summary:hover { background: var(--bg); }
+details.collapsible .collapsible-body { padding: 0 0.9rem 0.9rem; }
+details.collapsible[open] > summary { border-bottom: 1px solid var(--border); }
+
+.entity-badges { display: flex; gap: 0.4rem; flex-wrap: wrap; margin: 0.4rem 0 1rem; }
+.entity-badge {
+  display: inline-flex; align-items: center; gap: 0.3rem; background: var(--bg);
+  border: 1px solid var(--border); border-radius: 999px; padding: 0.2rem 0.7rem;
+  font-size: 0.78rem; text-decoration: none; color: var(--ink);
+}
+.entity-badge:hover { border-color: var(--accent); color: var(--accent); }
+
+.entity-field label { color: var(--accent); font-weight: 600; }
+.entity-field input { border-color: var(--accent); }
+
+.doe-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; margin-top: 0.5rem; }
+.doe-table th, .doe-table td { border: 1px solid var(--border); padding: 0.3rem 0.5rem; text-align: left; white-space: nowrap; }
+.doe-table th { background: var(--bg); font-weight: 600; }
+.doe-table-wrap { overflow-x: auto; }
+.doe-warning { background: #fdf3e3; border: 1px solid var(--changed); color: #6b5311; padding: 0.5rem 0.7rem; border-radius: 8px; font-size: 0.82rem; margin-top: 0.5rem; }

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import importlib
 import sys
+import typing
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -20,9 +21,12 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ValidationError
 
+from ..batch import analyze_batch
 from ..commit_form import FormValidationError
+from ..design import DesignError, check_identifiability, fractional_factorial, full_factorial, latin_hypercube, sweep
 from ..diffing import StructureDiff
-from ..errors import ExperimentNotFoundError, FollowError, MergeError, NothingToCommitError, StructureTypeError
+from ..entities import list_entity_ids
+from ..errors import BatchShapeError, ExperimentNotFoundError, FollowError, MergeError, NothingToCommitError, StructureTypeError
 from ..models import Conclusion, Evidence, Experiment, Objective, ReferenceLink, Step
 from ..rendering import render_fiche
 from ..repository import Repository
@@ -187,11 +191,81 @@ class RefRequest(BaseModel):
     force: bool = False
 
 
+class DesignPlanRequest(BaseModel):
+    """One design-of-experiments plan - see :mod:`follow.design` for what each ``type`` means.
+    Fields irrelevant to the chosen ``type`` are simply ignored (e.g. ``values`` for a
+    ``full_factorial`` plan), rather than one request schema per plan type, to keep the endpoint
+    a single shape the GUI's DOE screen can post regardless of which plan the user picked.
+    """
+
+    type: str  # "sweep" | "full_factorial" | "latin_hypercube" | "fractional_factorial"
+    id_field: str | None = None
+    # sweep
+    field: str | None = None
+    values: list[Any] = Field(default_factory=list)
+    # full_factorial: {field_name: [values...]}
+    factors: dict[str, list[Any]] = Field(default_factory=dict)
+    # latin_hypercube
+    n: int | None = None
+    seed: int | None = None
+    factor_ranges: dict[str, list[Any]] = Field(default_factory=dict)  # [low, high] or [low, high, unit]
+    # fractional_factorial: factors above as [low, high] or [low, high, unit]; generators map a
+    # generated factor's name to the base factors whose sign-product defines it
+    generators: dict[str, list[str]] = Field(default_factory=dict)
+
+
+class DesignGenerateRequest(BaseModel):
+    structure_type: str
+    field: str
+    reference: dict[str, Any]
+    plan: DesignPlanRequest
+
+
 def _experiment_payload(experiment: Experiment, repo: Repository) -> dict[str, Any]:
+    batch_fields: list[str] = []
+    try:
+        structure_cls = Structure.resolve(experiment.structure_type)
+    except StructureTypeError:
+        structure_cls = None
+    if structure_cls is not None:
+        for name in _batch_fields(structure_cls):
+            value = experiment.structure.get(name)
+            if isinstance(value, list) and len(value) > 1:
+                batch_fields.append(name)
     return {
         "experiment": experiment.model_dump(mode="json"),
         "fiche_markdown": render_fiche(experiment, repo),
+        "entity_ids": list_entity_ids(experiment.structure),
+        "batch_fields": batch_fields,
     }
+
+
+def _list_item_structure_class(annotation: Any) -> type[Structure] | None:
+    """If ``annotation`` is ``list[X]`` for some ``Structure`` subclass ``X``, return ``X`` -
+    otherwise ``None``. This is how a "batch" field (an experiment holding many sibling entities,
+    e.g. ``WaferLot.wafers: list[Wafer]`` - see :mod:`follow.batch`) is told apart from an
+    ordinary list field, generically, from the parent model's own field annotations - no
+    per-domain configuration needed for the DOE generator to find where to plug in.
+    """
+    origin = typing.get_origin(annotation)
+    if origin is not list:
+        return None
+    args = typing.get_args(annotation)
+    if not args:
+        return None
+    item = args[0]
+    if isinstance(item, type) and issubclass(item, Structure):
+        return item
+    return None
+
+
+def _batch_fields(structure_cls: type[Structure]) -> dict[str, type[Structure]]:
+    fields = {}
+    for name, field_info in structure_cls.model_fields.items():
+        entity_cls = _list_item_structure_class(field_info.annotation)
+        if entity_cls is not None:
+            fields[name] = entity_cls
+    return fields
 
 
 def create_app(
@@ -301,6 +375,88 @@ def create_app(
             return None
         return repo.commit_form.model_dump(mode="json")
 
+    @app.get("/api/structures/{key:path}/batch-fields")
+    def batch_fields(key: str) -> list[dict[str, Any]]:
+        """Which fields of structure type ``key`` hold a list of sibling entities (``list[X]``
+        for some other registered ``Structure`` subclass ``X``) - e.g. ``WaferLot.wafers``. Each
+        entry carries the entity type's own JSON Schema, so the GUI can build both a reference
+        (baseline) form and the factor pickers for :func:`design_generate` without a second
+        round-trip.
+        """
+        try:
+            cls = Structure.resolve(key)
+        except StructureTypeError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return [
+            {"field": name, "entity_type": entity_cls.registry_key(), "entity_schema": entity_cls.model_json_schema()}
+            for name, entity_cls in _batch_fields(cls).items()
+        ]
+
+    @app.post("/api/design/generate")
+    def design_generate(body: DesignGenerateRequest) -> dict[str, Any]:
+        """Generate a batch of structural variants (a DOE split) for one "batch field" of a
+        structure type, and analyze the result the same way ``follow explode`` does - so the GUI
+        can show the constant/varying split ("the matrix") and an identifiability warning before
+        anyone commits to it, not after.
+        """
+        try:
+            parent_cls = Structure.resolve(body.structure_type)
+        except StructureTypeError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        entity_cls = _batch_fields(parent_cls).get(body.field)
+        if entity_cls is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{body.field!r} n'est pas un champ de {body.structure_type!r} contenant une liste d'entités (Structure)",
+            )
+        reference = entity_cls.model_validate(body.reference)
+
+        plan = body.plan
+        resolution: int | None = None
+        aliases: dict[str, list[str]] = {}
+        factor_names: list[str]
+        if plan.type == "sweep":
+            if not plan.field:
+                raise HTTPException(status_code=422, detail="plan 'sweep' : 'field' est requis")
+            variants = sweep(reference, plan.field, plan.values, id_field=plan.id_field)
+            factor_names = [plan.field]
+        elif plan.type == "full_factorial":
+            if not plan.factors:
+                raise HTTPException(status_code=422, detail="plan 'full_factorial' : 'factors' est requis")
+            variants = full_factorial(reference, id_field=plan.id_field, **plan.factors)
+            factor_names = list(plan.factors)
+        elif plan.type == "latin_hypercube":
+            if not plan.n or not plan.factor_ranges:
+                raise HTTPException(status_code=422, detail="plan 'latin_hypercube' : 'n' et 'factor_ranges' sont requis")
+            ranges = {name: tuple(spec) for name, spec in plan.factor_ranges.items()}
+            variants = latin_hypercube(reference, plan.n, seed=plan.seed, id_field=plan.id_field, **ranges)
+            factor_names = list(plan.factor_ranges)
+        elif plan.type == "fractional_factorial":
+            if not plan.factors:
+                raise HTTPException(status_code=422, detail="plan 'fractional_factorial' : 'factors' est requis")
+            ranges = {name: tuple(spec) for name, spec in plan.factors.items()}
+            result = fractional_factorial(reference, ranges, plan.generators, id_field=plan.id_field)
+            variants, resolution, aliases = result.variants, result.resolution, result.aliases
+            factor_names = list(plan.factors)
+        else:
+            raise HTTPException(status_code=422, detail=f"type de plan inconnu: {plan.type!r}")
+
+        variation = analyze_batch(variants, ignore=[plan.id_field] if plan.id_field else [])
+        try:
+            identifiability = check_identifiability(variants, factor_names)
+        except (TypeError, ValueError):
+            # a non-numeric factor (a string level, say) can't be correlation-checked - the split
+            # itself is still perfectly valid, so this is skipped rather than failing the request.
+            identifiability = []
+
+        return {
+            "variants": [v.model_dump(mode="json") for v in variants],
+            "variation": variation.model_dump(mode="json"),
+            "identifiability": [{"a": a, "b": b, "correlation": corr} for a, b, corr in identifiability],
+            "resolution": resolution,
+            "aliases": aliases,
+        }
+
     @app.get("/api/log/{ref}")
     def log(ref: str, offset: int = 0, limit: int = 50) -> dict[str, Any]:
         """A page of ``ref``'s history, newest first - ``repo.log`` itself has no notion of
@@ -366,6 +522,26 @@ def create_app(
         if len(repo) == 0:
             return "<p style='font-family: sans-serif; padding: 1rem;'>Dépôt vide - rien à représenter.</p>"
         return build_graph_figure(repo).to_html(include_plotlyjs=True, full_html=True)
+
+    # Registered before the generic "{ref:path}" experiment-lookup route below: {ref:path} is
+    # greedy (it matches slashes too, so it accepts anything including "<id>/batch/<field>" as
+    # one big ref) and FastAPI/Starlette match routes in registration order, so the generic route
+    # would otherwise swallow every request meant for this one before it ever got a chance to run.
+    @app.get("/api/experiments/{ref:path}/batch/{field}")
+    def experiment_batch(ref: str, field: str) -> dict[str, Any]:
+        """The constant/varying split (:func:`~follow.batch.analyze_batch`) of one batch field
+        of an already-committed experiment - the same analysis ``follow explode`` renders to a
+        standalone HTML page, here as JSON for the GUI's "matrice de split" panel on a fiche.
+        """
+        experiment = repo.get(ref)
+        entities = experiment.structure.get(field)
+        if entities is None or not isinstance(entities, list):
+            raise HTTPException(status_code=400, detail=f"{field!r} n'est pas un champ de liste sur cette expérience")
+        try:
+            variation = analyze_batch(entities)
+        except BatchShapeError as exc:
+            raise HTTPException(status_code=400, detail=_message(exc)) from exc
+        return {"field": field, "variation": variation.model_dump(mode="json")}
 
     @app.get("/api/experiments/{ref:path}")
     def get_experiment(ref: str) -> dict[str, Any]:

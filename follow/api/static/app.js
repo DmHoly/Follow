@@ -44,6 +44,14 @@ function showError(container, err) {
   container.appendChild(el("div", { class: "error-box", text: String(err.message || err) }));
 }
 
+/** A <details>/<summary> collapsible section. `open` controls whether it starts expanded. */
+function collapsible(title, children, { open = false, className = "" } = {}) {
+  return el("details", { class: `collapsible ${className}`.trim(), ...(open ? { open: "" } : {}) }, [
+    el("summary", { text: title }),
+    el("div", { class: "collapsible-body" }, children),
+  ]);
+}
+
 // -- app state -----------------------------------------------------------------------------
 
 const state = { branches: {}, tags: {}, activeRef: null, health: null };
@@ -218,6 +226,15 @@ async function showExperiment(id) {
     const exp = data.experiment;
     view.appendChild(el("h1", { text: exp.title }));
 
+    if (data.entity_ids && data.entity_ids.length > 0) {
+      view.appendChild(el("div", { class: "entity-badges" }, data.entity_ids.map((id) => el("a", {
+        class: "entity-badge",
+        href: `/app/entite/${encodeURIComponent(id)}`,
+        onclick: (e) => { e.preventDefault(); navigate(`/app/entite/${encodeURIComponent(id)}`); },
+        text: `🏷️ ${id}`,
+      }))));
+    }
+
     const toolbar = el("div", { class: "toolbar" }, [
       el("button", { text: "Dériver →", onclick: () => navigate(`/app/deriver/${encodeURIComponent(exp.id)}`) }),
       el("button", { class: "secondary", text: "← Historique", onclick: () => navigate(`/app/historique/${encodeURIComponent(state.activeRef || exp.branch)}`) }),
@@ -248,6 +265,14 @@ async function showExperiment(id) {
       view.appendChild(diffCard);
     }
 
+    for (const field of data.batch_fields || []) {
+      const panelBody = el("div", { class: "muted", text: "chargement…" });
+      view.appendChild(collapsible(`Matrice de split — ${field}`, [panelBody]));
+      get(`/api/experiments/${encodeURIComponent(exp.id)}/batch/${encodeURIComponent(field)}`)
+        .then((result) => { clear(panelBody); panelBody.appendChild(renderDoeResultTable(result, { entityWord: "au total" })); })
+        .catch((err) => { clear(panelBody); showError(panelBody, err); });
+    }
+
     view.appendChild(el("pre", { class: "fiche", text: data.fiche_markdown }));
   } catch (err) {
     showError(view, err);
@@ -268,6 +293,28 @@ function resolveSchema(node, defs) {
   return node || {};
 }
 
+/** Append a label + a built field to `wrap`, for one property of an object schema.
+ * entity_id is a convention (see follow.entities), not a schema feature - a plain string field
+ * a domain author names "entity_id" to mean "this is the physical thing's name". Highlighting it
+ * here is the only way the GUI can point that out at all, since nothing about the JSON Schema
+ * itself distinguishes it from any other string field.
+ */
+function appendLabeledField(wrap, key, propSchema, required, field, prefix = "") {
+  // Prefer the *field's own* title (set on the property in the parent schema) over the title
+  // baked into whatever it $ref's to - a property typed `temperature: Quantity` dereferences to
+  // Quantity's own schema, whose title is "Quantity", not "Temperature"; only a bare, title-less
+  // property should fall back to its key name.
+  const label = propSchema && propSchema.title ? propSchema.title : key.replace(/_/g, " ");
+  const isEntityId = key === "entity_id";
+  const fieldWrap = isEntityId ? el("div", { class: "entity-field" }) : wrap;
+  fieldWrap.appendChild(el("label", { text: `${isEntityId ? "🏷️ " : ""}${prefix}${label}${required ? " *" : ""}` }));
+  fieldWrap.appendChild(field.element);
+  if (isEntityId) {
+    fieldWrap.appendChild(el("p", { class: "muted", text: "Identifiant physique (moule, wafer, échantillon...) - retrouvable ensuite via Entité, même sur une autre branche." }));
+    wrap.appendChild(fieldWrap);
+  }
+}
+
 /** Build a form for one JSON-schema node. Returns {element, getValue()}. */
 function buildSchemaField(node, defs, initial) {
   const resolved = resolveSchema(node, defs);
@@ -279,13 +326,7 @@ function buildSchemaField(node, defs, initial) {
     for (const [key, propSchema] of Object.entries(resolved.properties)) {
       const required = (resolved.required || []).includes(key);
       const field = buildSchemaField(propSchema, defs, initial ? initial[key] : undefined);
-      // Prefer the *field's own* title (set on the property in the parent schema) over the
-      // title baked into whatever it $ref's to - a property typed `temperature: Quantity`
-      // dereferences to Quantity's own schema, whose title is "Quantity", not "Temperature";
-      // only a bare, title-less property should fall back to its key name.
-      const label = propSchema && propSchema.title ? propSchema.title : key.replace(/_/g, " ");
-      wrap.appendChild(el("label", { text: `${label}${required ? " *" : ""}` }));
-      wrap.appendChild(field.element);
+      appendLabeledField(wrap, key, propSchema, required, field);
       rows[key] = field;
     }
     return {
@@ -344,15 +385,28 @@ function buildSchemaField(node, defs, initial) {
 
   if (type === "array") {
     const itemSchema = resolved.items || {};
+    const itemResolved = resolveSchema(itemSchema, defs);
+    const isObjectItem = itemResolved.type === "object" && !!itemResolved.properties;
     const list = el("div", {});
     const items = [];
 
     function addRow(value) {
       const field = buildSchemaField(itemSchema, defs, value);
-      const row = el("div", { class: "array-item" }, [
-        el("button", { class: "remove", type: "button", text: "✕", onclick: () => { row.remove(); items.splice(items.indexOf(entry), 1); } }),
-        field.element,
-      ]);
+      const removeBtn = el("button", { class: "remove", type: "button", text: "✕", onclick: () => { row.remove(); items.splice(items.indexOf(entry), 1); } });
+      let row;
+      // A batch-generated array (a DOE split, say) can easily hold dozens of object rows - each
+      // one fully expanded made that unreadable, so anything past the first few starts
+      // collapsed, labelled with whatever identifying value the row already has (slot/name/
+      // entity_id/id, in that order) so a summary line still means something.
+      if (isObjectItem) {
+        const v = value || {};
+        const hint = v.slot ?? v.name ?? v.entity_id ?? v.id;
+        const label = `#${items.length + 1}${hint !== undefined && hint !== null && hint !== "" ? " — " + hint : ""}`;
+        const details = collapsible(label, [field.element], { open: items.length < 3 });
+        row = el("div", { class: "array-item" }, [removeBtn, details]);
+      } else {
+        row = el("div", { class: "array-item" }, [removeBtn, field.element]);
+      }
       const entry = { row, field };
       items.push(entry);
       list.appendChild(row);
@@ -570,6 +624,265 @@ function buildCommitFormFields(commitForm, initial) {
   };
 }
 
+// -- DOE / batch field editor -------------------------------------------------------------------
+//
+// A "batch field" is a list[Structure] field (e.g. WaferLot.wafers: list[Wafer], see
+// follow.batch) - many sibling entities inside one experiment. Instead of only letting the user
+// hand-add rows one at a time, this generates a whole design (sweep / full factorial / Latin
+// hypercube - see follow.design) from a baseline entity plus a few factors, previews the
+// resulting split matrix (which parameters stayed constant, which varied - follow.batch.analyze_batch,
+// the same analysis `follow explode` runs), and flags any two factors that varied together too
+// closely to tell apart (follow.design.check_identifiability) - all before anything is created.
+
+function entityLeafFieldNames(entitySchema) {
+  return Object.keys(entitySchema.properties || {});
+}
+
+function renderDoeResultTable(result, { entityWord = "générée(s)" } = {}) {
+  const wrap = el("div", {});
+  const { variation, identifiability = [], resolution = null, aliases = {} } = result;
+  wrap.appendChild(el("p", { class: "muted", text: `${variation.entity_count} entité(s) ${entityWord}.` }));
+
+  if (Object.keys(variation.constant).length > 0) {
+    wrap.appendChild(el("p", { text: `Constant sur toutes les entités : ${Object.keys(variation.constant).join(", ")}` }));
+  }
+
+  if (variation.varying.length > 0) {
+    const paths = variation.varying.map((f) => f.path);
+    const table = el("table", { class: "doe-table" });
+    const thead = el("tr", {}, [el("th", { text: "#" }), ...paths.map((p) => el("th", { text: p }))]);
+    table.appendChild(el("thead", {}, [thead]));
+    const n = variation.varying[0].values.length;
+    const tbody = el("tbody", {});
+    for (let i = 0; i < n; i++) {
+      const cells = variation.varying.map((f) => el("td", { text: JSON.stringify(f.values[i]) }));
+      tbody.appendChild(el("tr", {}, [el("td", { text: String(i + 1) }), ...cells]));
+    }
+    table.appendChild(tbody);
+    wrap.appendChild(el("div", { class: "doe-table-wrap" }, [table]));
+  }
+
+  for (const { a, b, correlation } of identifiability) {
+    wrap.appendChild(el("div", {
+      class: "doe-warning",
+      text: `⚠ ${a} et ${b} varient ensemble (corrélation ${correlation.toFixed(2)}) - leurs effets ne seront pas séparables statistiquement.`,
+    }));
+  }
+
+  if (resolution) {
+    wrap.appendChild(el("p", { class: "muted", text: `Résolution du plan fractionnaire : ${resolution === 3 ? "III" : resolution === 4 ? "IV" : resolution === 5 ? "V" : resolution}` }));
+  }
+  if (aliases && Object.keys(aliases).length > 0) {
+    wrap.appendChild(el("pre", { class: "fiche", text: Object.entries(aliases).map(([k, v]) => `${k}  ~  ${v.join(", ")}`).join("\n") }));
+  }
+  return wrap;
+}
+
+function buildBatchFieldEditor(structureTypeKey, fieldName, batchInfo, initialItems) {
+  const entitySchema = batchInfo.entity_schema;
+  const entityDefs = entitySchema.$defs || {};
+  const arrayNode = { type: "array", items: entitySchema };
+  let currentField = buildSchemaField(arrayNode, entityDefs, initialItems);
+  const arrayContainer = el("div", {}, [currentField.element]);
+
+  const leafNames = entityLeafFieldNames(entitySchema);
+  const planTypeSelect = el("select", {}, [
+    el("option", { value: "sweep", text: "Balayage (un facteur)" }),
+    el("option", { value: "full_factorial", text: "Factoriel complet (tous les facteurs croisés)" }),
+    el("option", { value: "latin_hypercube", text: "Hypercube latin (échantillonnage aléatoire stratifié)" }),
+  ]);
+  const idFieldInput = el("input", { type: "text", placeholder: "ex: slot (optionnel, numéroté 1..N automatiquement)" });
+  const referenceField = buildSchemaField(entitySchema, entityDefs, undefined);
+  const factorsContainer = el("div", {});
+  const resultContainer = el("div", {});
+  const doeError = el("div", {});
+
+  function factorFieldSelect() {
+    return el("select", {}, leafNames.map((n) => el("option", { value: n, text: n })));
+  }
+
+  function renderFactorsForPlan() {
+    clear(factorsContainer);
+    if (planTypeSelect.value === "sweep") {
+      const fieldSel = factorFieldSelect();
+      const valuesInput = el("input", { type: "text", placeholder: "valeurs séparées par des virgules, ex: 10,20,30" });
+      const unitInput = el("input", { type: "text", placeholder: "unité (optionnel)" });
+      factorsContainer.appendChild(el("div", {}, [
+        el("label", { text: "Facteur" }), fieldSel,
+        el("label", { text: "Valeurs" }), valuesInput,
+        el("label", { text: "Unité" }), unitInput,
+      ]));
+      factorsContainer._collect = () => ({
+        type: "sweep",
+        id_field: idFieldInput.value.trim() || null,
+        field: fieldSel.value,
+        values: valuesInput.value.split(",").map((s) => s.trim()).filter(Boolean).map((v) => parseNumberOrString(v, unitInput.value.trim())),
+      });
+    } else if (planTypeSelect.value === "full_factorial") {
+      const rows = [];
+      const list = el("div", {});
+      function addRow() {
+        const fieldSel = factorFieldSelect();
+        const valuesInput = el("input", { type: "text", placeholder: "valeurs séparées par des virgules" });
+        const unitInput = el("input", { type: "text", placeholder: "unité (optionnel)" });
+        const row = el("div", { class: "array-item" }, [
+          el("button", { type: "button", class: "remove", text: "✕", onclick: () => { row.remove(); rows.splice(rows.indexOf(entry), 1); } }),
+          el("label", { text: "Facteur" }), fieldSel,
+          el("label", { text: "Valeurs" }), valuesInput,
+          el("label", { text: "Unité" }), unitInput,
+        ]);
+        const entry = { fieldSel, valuesInput, unitInput };
+        rows.push(entry);
+        list.appendChild(row);
+      }
+      addRow();
+      addRow();
+      factorsContainer.appendChild(el("div", {}, [
+        list,
+        el("button", { type: "button", class: "secondary", text: "+ facteur", onclick: addRow }),
+      ]));
+      factorsContainer._collect = () => {
+        const factors = {};
+        for (const r of rows) {
+          const values = r.valuesInput.value.split(",").map((s) => s.trim()).filter(Boolean).map((v) => parseNumberOrString(v, r.unitInput.value.trim()));
+          if (values.length) factors[r.fieldSel.value] = values;
+        }
+        return { type: "full_factorial", id_field: idFieldInput.value.trim() || null, factors };
+      };
+    } else {
+      const nInput = el("input", { type: "number", value: "10" });
+      const seedInput = el("input", { type: "number", placeholder: "graine aléatoire (optionnel)" });
+      const rows = [];
+      const list = el("div", {});
+      function addRow() {
+        const fieldSel = factorFieldSelect();
+        const lowInput = el("input", { type: "number", step: "any", placeholder: "min" });
+        const highInput = el("input", { type: "number", step: "any", placeholder: "max" });
+        const unitInput = el("input", { type: "text", placeholder: "unité (optionnel)" });
+        const row = el("div", { class: "array-item" }, [
+          el("button", { type: "button", class: "remove", text: "✕", onclick: () => { row.remove(); rows.splice(rows.indexOf(entry), 1); } }),
+          el("label", { text: "Facteur" }), fieldSel,
+          el("div", { class: "row" }, [
+            el("div", {}, [el("label", { text: "min" }), lowInput]),
+            el("div", {}, [el("label", { text: "max" }), highInput]),
+          ]),
+          el("label", { text: "Unité" }), unitInput,
+        ]);
+        const entry = { fieldSel, lowInput, highInput, unitInput };
+        rows.push(entry);
+        list.appendChild(row);
+      }
+      addRow();
+      factorsContainer.appendChild(el("div", {}, [
+        el("label", { text: "Nombre d'entités (n)" }), nInput,
+        el("label", { text: "Graine (optionnel)" }), seedInput,
+        list,
+        el("button", { type: "button", class: "secondary", text: "+ facteur", onclick: addRow }),
+      ]));
+      factorsContainer._collect = () => {
+        const factor_ranges = {};
+        for (const r of rows) {
+          if (r.lowInput.value === "" || r.highInput.value === "") continue;
+          const spec = [parseFloat(r.lowInput.value), parseFloat(r.highInput.value)];
+          if (r.unitInput.value.trim()) spec.push(r.unitInput.value.trim());
+          factor_ranges[r.fieldSel.value] = spec;
+        }
+        return {
+          type: "latin_hypercube",
+          id_field: idFieldInput.value.trim() || null,
+          n: parseInt(nInput.value, 10) || null,
+          seed: seedInput.value ? parseInt(seedInput.value, 10) : null,
+          factor_ranges,
+        };
+      };
+    }
+  }
+  planTypeSelect.addEventListener("change", renderFactorsForPlan);
+  renderFactorsForPlan();
+
+  const generateBtn = el("button", { type: "button", text: "Générer l'aperçu", onclick: async () => {
+    clear(doeError);
+    clear(resultContainer);
+    try {
+      const plan = factorsContainer._collect();
+      const body = { structure_type: structureTypeKey, field: fieldName, reference: referenceField.getValue(), plan };
+      const result = await post("/api/design/generate", body);
+      resultContainer.appendChild(renderDoeResultTable(result));
+      resultContainer.appendChild(el("button", {
+        type: "button",
+        text: `Utiliser ce plan (${result.variants.length} entités)`,
+        onclick: () => {
+          clear(arrayContainer);
+          currentField = buildSchemaField(arrayNode, entityDefs, result.variants);
+          arrayContainer.appendChild(currentField.element);
+        },
+      }));
+    } catch (err) {
+      showError(doeError, err);
+    }
+  } });
+
+  const doePanel = collapsible("Générer un plan (DOE)", [
+    el("h2", { text: "Valeurs de référence (communes à toutes les entités)" }),
+    referenceField.element,
+    el("h2", { text: "Plan" }),
+    el("label", { text: "Type de plan" }), planTypeSelect,
+    el("label", { text: "Champ identifiant (optionnel)" }), idFieldInput,
+    factorsContainer,
+    doeError,
+    el("div", { class: "toolbar" }, [generateBtn]),
+    resultContainer,
+  ]);
+
+  const wrap = el("div", {}, [arrayContainer, doePanel]);
+  return { element: wrap, getValue: () => currentField.getValue() };
+}
+
+function parseNumberOrString(raw, unit) {
+  const num = parseFloat(raw);
+  const value = !Number.isNaN(num) && String(num) === raw.trim() ? num : raw;
+  return unit ? { value, unit } : value;
+}
+
+/** Build the form for a whole Structure type: like buildSchemaField, but any top-level field
+ * that holds a list of sibling entities (see follow.batch) gets the DOE-aware editor
+ * (buildBatchFieldEditor) instead of the plain add/remove-rows array editor.
+ */
+async function buildStructureForm(structureTypeKey, initial) {
+  const schema = await get(`/api/structures/${encodeURIComponent(structureTypeKey)}/schema`);
+  const defs = schema.$defs || {};
+  const resolved = resolveSchema(schema, defs);
+  const batchFieldsList = await get(`/api/structures/${encodeURIComponent(structureTypeKey)}/batch-fields`);
+  const batchFieldsMap = Object.fromEntries(batchFieldsList.map((b) => [b.field, b]));
+
+  if (!(resolved.type === "object" && resolved.properties)) {
+    return buildSchemaField(schema, defs, initial);
+  }
+
+  const rows = {};
+  const wrap = el("div", {});
+  for (const [key, propSchema] of Object.entries(resolved.properties)) {
+    const required = (resolved.required || []).includes(key);
+    const isBatch = Boolean(batchFieldsMap[key]);
+    const field = isBatch
+      ? buildBatchFieldEditor(structureTypeKey, key, batchFieldsMap[key], initial ? initial[key] : undefined)
+      : buildSchemaField(propSchema, defs, initial ? initial[key] : undefined);
+    appendLabeledField(wrap, key, propSchema, required, field, isBatch ? "📋 " : "");
+    rows[key] = field;
+  }
+  return {
+    element: wrap,
+    getValue() {
+      const out = {};
+      for (const [key, field] of Object.entries(rows)) {
+        const v = field.getValue();
+        if (v !== undefined) out[key] = v;
+      }
+      return out;
+    },
+  };
+}
+
 // -- new experiment / derive forms -------------------------------------------------------------
 
 function advancedJsonField(labelText, help) {
@@ -611,15 +924,13 @@ async function showNewExperimentForm() {
   const intentInput = el("textarea", {});
   const authorInput = el("input", { type: "text" });
   const hypothesisInput = el("textarea", {});
-  const structureFormContainer = el("div", { class: "card" });
+  const structureFormContainer = el("div", {});
   let structureField = null;
 
   async function loadStructureForm() {
     clear(structureFormContainer);
     if (!structureSelect.value) return;
-    const schema = await get(`/api/structures/${encodeURIComponent(structureSelect.value)}/schema`);
-    structureField = buildSchemaField(schema, schema.$defs || {}, undefined);
-    structureFormContainer.appendChild(el("h2", { text: "Structure" }));
+    structureField = await buildStructureForm(structureSelect.value, undefined);
     structureFormContainer.appendChild(structureField.element);
   }
   structureSelect.addEventListener("change", loadStructureForm);
@@ -666,10 +977,8 @@ async function showNewExperimentForm() {
     el("label", { text: "Hypothèse" }), hypothesisInput,
     el("label", { text: "Tags" }), tagsInput,
     el("h2", { text: "Type de structure" }), structureSelect,
-    structureFormContainer,
-    el("h2", { text: "Avancé" }),
-    objectivesField.element,
-    stepsField.element,
+    collapsible("Structure", [structureFormContainer], { open: true }),
+    collapsible("Objectifs & étapes (avancé)", [objectivesField.element, stepsField.element]),
     commitFormField.element,
     el("div", { class: "toolbar" }, [
       el("button", { type: "submit", text: "Créer et committer" }),
@@ -695,8 +1004,7 @@ async function showDeriveForm(parentExp) {
   const errorBox = el("div", {});
   view.appendChild(errorBox);
 
-  const schema = await get(`/api/structures/${encodeURIComponent(parentExp.structure_type)}/schema`);
-  const structureField = buildSchemaField(schema, schema.$defs || {}, parentExp.structure);
+  const structureField = await buildStructureForm(parentExp.structure_type, parentExp.structure);
 
   const newBranchInput = el("input", { type: "text", placeholder: parentExp.branch });
   const titleInput = el("input", { type: "text" });
@@ -729,12 +1037,9 @@ async function showDeriveForm(parentExp) {
     el("label", { text: "Nouvelle branche (optionnel, sinon: " + parentExp.branch + ")" }), newBranchInput,
     el("label", { text: "Titre" }), titleInput,
     el("label", { text: "Intention" }), intentInput,
-    el("h2", { text: "Structure (héritée du parent, modifiable)" }),
-    structureField.element,
-    el("h2", { text: "Preuves" }),
-    evidenceField.element,
-    el("h2", { text: "Conclusion" }),
-    conclusionField.element,
+    collapsible("Structure (héritée du parent, modifiable)", [structureField.element], { open: true }),
+    collapsible("Preuves", [evidenceField.element], { open: (parentExp.evidence || []).length > 0 }),
+    collapsible("Conclusion", [conclusionField.element], { open: true }),
     commitFormField.element,
     el("div", { class: "toolbar" }, [
       el("button", { type: "submit", text: "Créer et committer" }),

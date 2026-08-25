@@ -103,12 +103,43 @@ figure que `follow graph` écrit sur disque, via `follow.graphing.build_graph_fi
 
 `GET /api/structures` liste les types de `Structure` enregistrés ; en choisir un déclenche
 `GET /api/structures/{key}/schema` (JSON Schema Pydantic), à partir duquel le formulaire de
-structure est généré récursivement (objets, tableaux, `dict[str, X]`, enums...). `GET
-/api/commit_form` ajoute les champs du formulaire de commit du dépôt s'il y en a un. La
-soumission fait un seul `POST /api/experiments` (création + commit en un temps, pas d'étape
-brouillon côté API).
+structure est généré récursivement (objets, tableaux, `dict[str, X]`, enums...) et regroupé en
+sections repliables (`<details>`). `GET /api/commit_form` ajoute les champs du formulaire de
+commit du dépôt s'il y en a un. La soumission fait un seul `POST /api/experiments` (création +
+commit en un temps, pas d'étape brouillon côté API).
+
+Un champ nommé `entity_id` (la convention de `follow.entities` pour identifier une chose
+physique - moule, wafer, échantillon) est repéré et mis en avant (🏷️, aide contextuelle),
+au lieu de rester noyé dans le reste du formulaire de structure.
 
 ![Nouvelle expérience](screenshots/07-nouvelle-experience.png)
+
+### Générateur de plan (DOE)
+
+Tout champ `list[X]` d'une structure, où `X` est lui-même un type `Structure` enregistré (ex.
+`WaferLot.wafers: list[Wafer]` - un lot, plusieurs wafers, voir `follow.batch`), est détecté
+automatiquement (`GET /api/structures/{key}/batch-fields`) et reçoit, en plus de l'éditeur
+ligne-par-ligne habituel, un panneau repliable **"Générer un plan (DOE)"** :
+
+1. des valeurs de référence (communes à toutes les entités, via le même générateur de formulaire
+   que la structure principale) ;
+2. un type de plan - balayage (`sweep`), factoriel complet (`full_factorial`), hypercube latin
+   (`latin_hypercube`) - et ses facteurs/niveaux ;
+3. un aperçu (`POST /api/design/generate`, qui appelle directement `follow.design` +
+   `follow.batch.analyze_batch`) : la matrice résultante (constant vs variable, une colonne par
+   facteur), et une alerte si deux facteurs varient ensemble au point de ne plus être
+   statistiquement séparables (`follow.design.check_identifiability`) ;
+4. "Utiliser ce plan" remplace le contenu de l'éditeur par les entités générées - toujours
+   éditables à la main ensuite.
+
+Le plan fractionnaire (`fractional_factorial`, avec sa structure d'aliasing) est disponible côté
+API mais n'a pas encore d'écran dédié - à construire à la demande.
+
+![Générateur de plan (DOE)](screenshots/12-doe-generator.png)
+
+Pour une expérience **déjà committée**, la même analyse (sans le générateur) apparaît sur sa
+fiche sous "Matrice de split — `<champ>`" (`GET /api/experiments/{ref}/batch/{field}`) dès que le
+champ contient plus d'une entité - l'équivalent GUI de `follow explode`.
 
 ### Dériver + conclure (`/app/deriver/<id>`)
 
@@ -158,10 +189,12 @@ Toutes les routes sont sous `/api`, en JSON.
 | `GET /api/branches`, `GET /api/tags` | `{nom: id_expérience}` |
 | `GET /api/structures` | Types de `Structure` enregistrés (`key`, `name`) |
 | `GET /api/structures/{key}/schema` | JSON Schema Pydantic du type (pour générer un formulaire) |
+| `GET /api/structures/{key}/batch-fields` | Champs `list[Structure]` de ce type (nom, type d'entité, son schéma) |
 | `GET /api/commit_form` | Formulaire de commit du dépôt (`null` si aucun configuré) |
 | `GET /api/log/{ref}?offset=&limit=` | Lignée premier-parent de `ref`, paginée, plus récent d'abord |
 | `GET /api/experiments?status=&offset=&limit=` | Toutes les expériences du dépôt, filtrées/paginées |
-| `GET /api/experiments/{ref}` | Une expérience + sa fiche rendue (`fiche_markdown`) |
+| `GET /api/experiments/{ref}` | Une expérience + sa fiche rendue (`fiche_markdown`), ses `entity_ids`, ses `batch_fields` |
+| `GET /api/experiments/{ref}/batch/{field}` | Split constant/variable d'un champ liste déjà committé (`follow explode`, en JSON) |
 | `GET /api/diff?a=&b=&steps=` | Diff structurel (ou de protocole si `steps=true`) entre deux expériences |
 | `GET /api/graph` | Graphe de filiation brut (`{id: [ids parents]}`) |
 | `GET /api/graph.html` | Le même graphe en page Plotly autonome |
@@ -169,6 +202,7 @@ Toutes les routes sont sous `/api`, en JSON.
 | `GET /api/examples` | Rapports de démonstration disponibles |
 | `POST /api/experiments` | Créer et committer une expérience |
 | `POST /api/experiments/{ref}/derive` | Dériver (+ conclure) depuis `ref` |
+| `POST /api/design/generate` | Générer un plan (sweep/factoriel/hypercube latin/fractionnaire) pour un champ batch |
 | `POST /api/merge` | Fusionner deux expériences |
 | `POST /api/branches`, `POST /api/tags` | Créer/déplacer un pointeur (`force` pour déplacer un existant) |
 
