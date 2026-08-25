@@ -3,7 +3,7 @@ Formulaire de commit obligatoire
 
 Une ``Structure`` capture la configuration étudiée, mais pas certaines métadonnées qu'on veut
 systématiquement tracer — qui a lancé le run, sur quel équipement, si un plan croisé a bien été
-vérifié pour l'aliasing (voir :doc:`design`)... :mod:`follow.commit_form` définit ce
+vérifié pour l'aliasing (voir :doc:`design`)... :mod:`follow.storage.commit_form` définit ce
 questionnaire une fois, en YAML, et le rend **obligatoire** à chaque commit d'un dépôt donné —
 plutôt que de compter sur un message de commit bien rédigé.
 
@@ -45,7 +45,7 @@ L'attacher à un dépôt
 .. code-block:: python
 
    from follow import Repository
-   from follow.commit_form import load_commit_form
+   from follow.storage.commit_form import load_commit_form
 
    repo = Repository("mon_labo", commit_form="commit_form.yml")
 
@@ -68,9 +68,9 @@ Répondre et committer
    builder.answer_form(operator="Alice", design_type="full_factorial", checked_confounding=True)
    builder.commit()   # lève FormValidationError si une réponse obligatoire manque ou est invalide
 
-:meth:`~follow.repository.ExperimentBuilder.answer_form` peut être appelé plusieurs fois (les
+:meth:`~follow.storage.repository.ExperimentBuilder.answer_form` peut être appelé plusieurs fois (les
 réponses se fusionnent) ; la validation n'a lieu qu'au commit, et
-:class:`~follow.commit_form.FormValidationError` liste **tous** les problèmes trouvés en une
+:class:`~follow.storage.commit_form.FormValidationError` liste **tous** les problèmes trouvés en une
 seule fois (champs manquants, type incorrect, choix invalide, champ inconnu du formulaire) —
 pensé pour une UI qui affiche tout d'un coup plutôt qu'un aller-retour par erreur.
 

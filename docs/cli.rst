@@ -32,7 +32,7 @@ Démarre un brouillon d'expérience racine (sans parent).
    * - ``--title`` / ``--intent``
      - Requis.
    * - ``--structure-type``
-     - Chemin pointé Python vers la classe :class:`~follow.structure.Structure`, ex. ``examples.recipe.CakeRecipe`` (requis).
+     - Chemin pointé Python vers la classe :class:`~follow.core.structure.Structure`, ex. ``examples.recipe.CakeRecipe`` (requis).
    * - ``--structure-file``
      - Fichier JSON conforme à ce type (requis).
    * - ``--author`` / ``--hypothesis``
@@ -204,8 +204,8 @@ Génère un compte rendu d'étude complet, sans IA, dérivé du dépôt — voir
 Menu interactif : naviguer dans le dépôt, démarrer une expérience, en dériver une variante,
 clôturer un brouillon (conclure + committer), fusionner deux branches, générer un rapport ou le
 graphe — sans mémoriser les sous-commandes et leurs options. Chaque action du menu appelle
-exactement la même API (:class:`~follow.repository.Repository`/
-:class:`~follow.repository.ExperimentBuilder`) que les sous-commandes ci-dessus ; rien n'est
+exactement la même API (:class:`~follow.storage.repository.Repository`/
+:class:`~follow.storage.repository.ExperimentBuilder`) que les sous-commandes ci-dessus ; rien n'est
 réimplémenté, seule la navigation change.
 
 .. code-block:: bash
@@ -220,7 +220,7 @@ Nécessite `questionary <https://questionary.readthedocs.io/>`_, non installé p
 
 Sans ``questionary`` installé, ``follow menu`` échoue avec un message clair plutôt qu'une
 trace d'erreur ; toutes les autres sous-commandes fonctionnent normalement (voir
-:mod:`follow.menu`).
+:mod:`follow.interfaces.menu`).
 
 L'authoring de la ``Structure`` elle-même n'est volontairement pas réinventé dans le menu : comme
 ``follow new --structure-file``, on pointe vers un fichier JSON existant — un formulaire

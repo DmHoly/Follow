@@ -10,7 +10,7 @@ entities, which parameters are the same across all of them (the shared baseline)
 (the actual DOE factors), read off mechanically rather than tracked by hand.
 
 This has nothing domain-specific in it - it walks dumped dicts the same way
-:mod:`follow.diffing` does, just N-way instead of 2-way - so it works identically whether the
+:mod:`follow.paths.diffing` does, just N-way instead of 2-way - so it works identically whether the
 entities are wafers, recipes, lens shapes, or anything else.
 """
 
@@ -20,9 +20,9 @@ from typing import Any, Sequence
 
 from pydantic import BaseModel
 
-from .errors import BatchShapeError
-from .formatting import is_quantity_leaf
-from .merging import get_path, split_path
+from ..core.errors import BatchShapeError
+from ..paths.formatting import is_quantity_leaf
+from ..paths.merging import get_path, split_path
 
 
 class BatchFactor(BaseModel):

@@ -18,8 +18,8 @@ Installation
 
 Python 3.11 ou plus est requis. Quatre dépendances : `pydantic <https://docs.pydantic.dev/>`_
 (les modèles), `plotly <https://plotly.com/python/>`_ (le graphe de filiation), `numpy
-<https://numpy.org/>`_ (générateurs de plan d'expériences, :mod:`follow.design`) et `pyyaml
-<https://pyyaml.org/>`_ (formulaires de commit, :mod:`follow.commit_form`) — pas de Graphviz,
+<https://numpy.org/>`_ (générateurs de plan d'expériences, :mod:`follow.doe.design`) et `pyyaml
+<https://pyyaml.org/>`_ (formulaires de commit, :mod:`follow.storage.commit_form`) — pas de Graphviz,
 pas de base de données, pas de moteur de template.
 
 .. code-block:: pycon
@@ -31,7 +31,7 @@ pas de base de données, pas de moteur de template.
 Premier dépôt
 -------------
 
-On modélise d'abord le domaine étudié en sous-classant :class:`~follow.structure.Structure` :
+On modélise d'abord le domaine étudié en sous-classant :class:`~follow.core.structure.Structure` :
 
 .. code-block:: python
 

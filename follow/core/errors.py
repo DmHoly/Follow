@@ -2,8 +2,8 @@
 
 ``FollowError`` was always documented as "the base class for Follow errors", but half the library
 raised bare ``ValueError``/``KeyError`` instead: :meth:`Repository.merge
-<follow.repository.Repository.merge>` a ``ValueError``, :meth:`Structure.resolve
-<follow.structure.Structure.resolve>` a ``KeyError``, :func:`~follow.merging.split_path` a
+<follow.storage.repository.Repository.merge>` a ``ValueError``, :meth:`Structure.resolve
+<follow.core.structure.Structure.resolve>` a ``KeyError``, :func:`~follow.paths.merging.split_path` a
 ``ValueError``, ``CommitForm`` a ``ValueError``... So ``except FollowError`` around a commit let
 the most expected failure of all - an unanswered commit form - straight through, and the CLI had
 to write ``except (FollowError, ValueError, KeyError, IndexError, TypeError)`` to catch one call.
@@ -37,7 +37,7 @@ class DanglingRefError(ExperimentNotFoundError):
 
     It is a kind of :class:`ExperimentNotFoundError` on purpose: callers already guarding for
     "this ref doesn't resolve" keep working, and ``ref in repo`` still answers False for it,
-    matching what :meth:`Repository.get <follow.repository.Repository.get>` will actually do. What
+    matching what :meth:`Repository.get <follow.storage.repository.Repository.get>` will actually do. What
     it adds is a message that says the repository is inconsistent rather than that the name is
     unknown - the two call for very different fixes.
     """
@@ -67,7 +67,7 @@ class NothingToCommitError(FollowError):
 
 
 class StructureTypeError(FollowError, KeyError):
-    """A ``structure_type`` key does not resolve to a registered :class:`~follow.structure.Structure`
+    """A ``structure_type`` key does not resolve to a registered :class:`~follow.core.structure.Structure`
     subclass - usually because the module defining it has not been imported yet.
     """
 
@@ -87,7 +87,7 @@ class PathNotFoundError(FollowError, KeyError):
 
 
 class BatchShapeError(FollowError, KeyError):
-    """The entities handed to :func:`~follow.batch.analyze_batch` do not share one shape, so
+    """The entities handed to :func:`~follow.doe.batch.analyze_batch` do not share one shape, so
     there is no meaningful set of parameters to compare across them.
     """
 

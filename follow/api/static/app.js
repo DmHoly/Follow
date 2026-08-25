@@ -312,7 +312,7 @@ function resolveSchema(node, defs) {
 }
 
 /** Append a label + a built field to `wrap`, for one property of an object schema.
- * entity_id is a convention (see follow.entities), not a schema feature - a plain string field
+ * entity_id is a convention (see follow.paths.entities), not a schema feature - a plain string field
  * a domain author names "entity_id" to mean "this is the physical thing's name". Highlighting it
  * here is the only way the GUI can point that out at all, since nothing about the JSON Schema
  * itself distinguishes it from any other string field.
@@ -635,7 +635,7 @@ function buildConclusionEditor(objectives, initial) {
   };
 }
 
-// -- repository commit form (follow.commit_form) --------------------------------------------
+// -- repository commit form (follow.storage.commit_form) --------------------------------------------
 
 function buildCommitFormFields(commitForm, initial) {
   initial = initial || {};
@@ -682,12 +682,12 @@ function buildCommitFormFields(commitForm, initial) {
 // -- DOE / batch field editor -------------------------------------------------------------------
 //
 // A "batch field" is a list[Structure] field (e.g. WaferLot.wafers: list[Wafer], see
-// follow.batch) - many sibling entities inside one experiment. Instead of only letting the user
+// follow.doe.batch) - many sibling entities inside one experiment. Instead of only letting the user
 // hand-add rows one at a time, this generates a whole design (sweep / full factorial / Latin
-// hypercube - see follow.design) from a baseline entity plus a few factors, previews the
-// resulting split matrix (which parameters stayed constant, which varied - follow.batch.analyze_batch,
+// hypercube - see follow.doe.design) from a baseline entity plus a few factors, previews the
+// resulting split matrix (which parameters stayed constant, which varied - follow.doe.batch.analyze_batch,
 // the same analysis `follow explode` runs), and flags any two factors that varied together too
-// closely to tell apart (follow.design.check_identifiability) - all before anything is created.
+// closely to tell apart (follow.doe.design.check_identifiability) - all before anything is created.
 
 function entityLeafFieldNames(entitySchema) {
   return Object.keys(entitySchema.properties || {});
@@ -900,7 +900,7 @@ function parseNumberOrString(raw, unit) {
 }
 
 /** Build the form for a whole Structure type: like buildSchemaField, but any top-level field
- * that holds a list of sibling entities (see follow.batch) gets the DOE-aware editor
+ * that holds a list of sibling entities (see follow.doe.batch) gets the DOE-aware editor
  * (buildBatchFieldEditor) instead of the plain add/remove-rows array editor.
  */
 async function buildStructureForm(structureTypeKey, initial) {

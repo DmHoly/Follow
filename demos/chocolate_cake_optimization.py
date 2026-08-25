@@ -25,9 +25,9 @@ from demos._main import run_demo
 from demos._report import batch_table, experiment_fiche, render_report
 from examples.chocolate_cake import CakeTrialBatch, ChocolateCake
 from follow import Quantity, Repository, analyze_batch
-from follow.report import graph_section
-from follow.commit_form import CommitForm
-from follow.design import check_identifiability, fractional_factorial, full_factorial, latin_hypercube, lin, sweep
+from follow.presentation.report import graph_section
+from follow.storage.commit_form import CommitForm
+from follow.doe.design import check_identifiability, fractional_factorial, full_factorial, latin_hypercube, lin, sweep
 
 COMMIT_FORM = CommitForm.model_validate(
     {
@@ -340,27 +340,27 @@ def render(repo: Repository, *, embed_plotly: bool) -> str:
 
     temp_section = _batch_section(
         repo, temp_batch, label="Étape 1 — Split manuel (sweep)",
-        desc="Un seul facteur qui varie (température de cuisson), généré par follow.design.sweep - toujours identifiable, rien avec quoi le confondre.",
+        desc="Un seul facteur qui varie (température de cuisson), généré par follow.doe.design.sweep - toujours identifiable, rien avec quoi le confondre.",
     )
 
     naive_section = _batch_section(
         repo, naive_batch, label="Étape 2a — Le split idiot (à ne pas faire)",
-        desc="Sucre et beurre montés ensemble au lieu d'être croisés : follow.design.check_identifiability les signale corrélés à plus de 0.99 avant même d'interpréter un résultat. La branche est committée quand même, abandonnée avec la raison écrite noir sur blanc plutôt que supprimée.",
+        desc="Sucre et beurre montés ensemble au lieu d'être croisés : follow.doe.design.check_identifiability les signale corrélés à plus de 0.99 avant même d'interpréter un résultat. La branche est committée quand même, abandonnée avec la raison écrite noir sur blanc plutôt que supprimée.",
     )
 
     sb_section = _batch_section(
         repo, sb_batch, label="Étape 2b — La correction (plan factoriel complet)",
-        desc="Les deux mêmes facteurs, cette fois croisés par follow.design.full_factorial : check_identifiability ne signale plus rien, chaque effet est estimable indépendamment.",
+        desc="Les deux mêmes facteurs, cette fois croisés par follow.doe.design.full_factorial : check_identifiability ne signale plus rien, chaque effet est estimable indépendamment.",
     )
 
     frac_section = _batch_section(
         repo, frac_batch, label="Étape 3 — Plan fractionnaire (2^(4-1))",
-        desc="4 facteurs en 8 essais au lieu de 16 : follow.design.fractional_factorial calcule la structure d'aliasing (résolution IV — les effets principaux ne sont confondus qu'avec des interactions à 3 facteurs), citée explicitement dans la preuve plutôt que découverte après coup.",
+        desc="4 facteurs en 8 essais au lieu de 16 : follow.doe.design.fractional_factorial calcule la structure d'aliasing (résolution IV — les effets principaux ne sont confondus qu'avec des interactions à 3 facteurs), citée explicitement dans la preuve plutôt que découverte après coup.",
     )
 
     lhs_section = _batch_section(
         repo, lhs_batch, label="Étape 4 — Screening (Latin Hypercube)",
-        desc="15 essais répartis aléatoirement mais stratifiés sur 5 facteurs à la fois, via follow.design.latin_hypercube - pour vérifier qu'aucune zone inattendue ne bat les optima déjà trouvés séparément.",
+        desc="15 essais répartis aléatoirement mais stratifiés sur 5 facteurs à la fois, via follow.doe.design.latin_hypercube - pour vérifier qu'aucune zone inattendue ne bat les optima déjà trouvés séparément.",
     )
 
     merge_section = f"""  <section class="section">

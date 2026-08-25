@@ -15,7 +15,7 @@ from demos._main import run_demo
 from demos._report import fiche_card, render_report, resolution_conflict_row, resolution_plain_row, trial_card
 from examples.recipe import BakeStep, CakeRecipe
 from follow import Quantity, Repository
-from follow.report import graph_section, status_legend
+from follow.presentation.report import graph_section, status_legend
 
 
 def _recipe() -> CakeRecipe:

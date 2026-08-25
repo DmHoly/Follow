@@ -33,8 +33,8 @@ pip install -e ".[dev,docs]"
 ```
 
 Python ≥ 3.11 requis. Dépendances : `pydantic` (les modèles), `plotly` (le graphe de filiation),
-`numpy` (générateurs de plan d'expériences, `follow.design`) et `pyyaml` (formulaires de commit,
-`follow.commit_form`) — pas de Graphviz, pas de base de données, pas de moteur de template. Extras
+`numpy` (générateurs de plan d'expériences, `follow.doe.design`) et `pyyaml` (formulaires de commit,
+`follow.storage.commit_form`) — pas de Graphviz, pas de base de données, pas de moteur de template. Extras
 optionnels : `.[dev]` (tests), `.[docs]` (Sphinx), `.[menu]` (`questionary`, pour `follow menu`).
 
 ```python
@@ -140,7 +140,7 @@ héritage), `mosfet.py` (MOSFET → FinFET), `solar_cell.py` (composition profon
 module → cellule → jonction PN → couche), `chocolate_fondant.py` (optimisation d'une recette de
 fondant au chocolat cœur coulant à partir de recettes réelles), `wafer_doe.py` (le cas d'école
 DOE : un lot d'entités suivi comme une seule expérience), `chocolate_cake.py` (champs plats,
-pensés pour `follow.design` — voir `docs/tutorial.rst`).
+pensés pour `follow.doe.design` — voir `docs/tutorial.rst`).
 
 Voir `demos/` pour des scénarios complets, bout en bout, rendus en pages HTML autonomes.
 
@@ -281,9 +281,9 @@ exactement comme un hunk de `git merge` qu'on ne touche pas. Voir `Repository.me
 Cas hors de portée de git : un plan d'expériences (DOE) factoriel réparti sur 25 wafers (ou 25
 moules de recette, 25 formes de lentille...) reste **une seule expérience** — une intention, un
 protocole, une conclusion — mais sa `Structure` contient une liste de 25 entités qui ont chacune
-reçu une combinaison différente de paramètres. `follow.batch.analyze_batch` sépare
+reçu une combinaison différente de paramètres. `follow.doe.batch.analyze_batch` sépare
 mécaniquement ce qui est constant sur toutes les entités de ce qui varie réellement (les
-facteurs du plan) ; `follow.report.batch_table` l'affiche comme un bloc « explosé » à poser à
+facteurs du plan) ; `follow.presentation.report.batch_table` l'affiche comme un bloc « explosé » à poser à
 côté de la fiche habituelle de l'expérience — un affichage hybride, par expérience et par
 entité.
 
@@ -306,14 +306,14 @@ construction sur chaque entité et empêcheraient sinon un lot réellement homog
 confirmation) de ressortir comme uniforme. Voir `demos/wafer_doe.py` (plan factoriel 5×5 sur 25
 wafers, puis lot de confirmation) et `docs/batch.rst` côté Python.
 
-## Générer le split lui-même (`follow.design`)
+## Générer le split lui-même (`follow.doe.design`)
 
 Pas besoin de recopier une structure de référence à la main pour chaque variante :
-`follow.design` prend une instance de référence déjà valide et un spec par facteur, et renvoie
+`follow.doe.design` prend une instance de référence déjà valide et un spec par facteur, et renvoie
 la liste de variantes.
 
 ```python
-from follow.design import full_factorial, lin
+from follow.doe.design import full_factorial, lin
 
 wafers = full_factorial(
     reference,                                            # un Wafer déjà valide
@@ -336,7 +336,7 @@ les croiser, rendant leurs effets impossibles à séparer statistiquement —
 effectivement construit :
 
 ```python
-from follow.design import check_identifiability
+from follow.doe.design import check_identifiability
 
 check_identifiability(bad_split, ["implant_dose", "anneal_temperature"])
 # [("implant_dose", "anneal_temperature", 0.999...)]  <- confondus, à corriger
@@ -377,14 +377,14 @@ follow trace moule-vert --repo mon_labo
 ```
 
 `repo.find_entity` parcourt le dépôt entier (toutes branches, tout lignage confondu) par la même
-technique de parcours générique que `follow.diffing`/`follow.batch` — aucune bookkeeping
+technique de parcours générique que `follow.paths.diffing`/`follow.doe.batch` — aucune bookkeeping
 manuelle, aucune référence à poser. Voir `docs/entities.rst`.
 
 ## Formulaire de commit obligatoire
 
 Une `Structure` capture la configuration étudiée, mais pas certaines métadonnées qu'on veut
 tracer systématiquement (qui a lancé le run, si un plan croisé a été vérifié pour l'aliasing...).
-`follow.commit_form` définit ce questionnaire une fois, en YAML, et le rend **obligatoire** à
+`follow.storage.commit_form` définit ce questionnaire une fois, en YAML, et le rend **obligatoire** à
 chaque commit d'un dépôt donné :
 
 ```yaml
@@ -429,7 +429,7 @@ follow report essai-cuisson --repo mon_labo --out etude-branche.html  # limiter 
 ```
 
 La page contient : un sommaire cliquable, le graphe de filiation, puis une fiche par expérience —
-`follow.report.experiment_fiche`, lue dans un seul ordre : **résumé** (intention + hypothèse) →
+`follow.presentation.report.experiment_fiche`, lue dans un seul ordre : **résumé** (intention + hypothèse) →
 **objectifs de l'étude** → **résultats & preuves** → **conclusion** (décision, résumé, et la
 suite). Pour chaque commit, ce qui a changé est calculé — pas recopié à la main :
 
@@ -461,6 +461,21 @@ un nœud positionné par la moyenne des positions de ses parents) : suffisante p
 filiation et les embranchements sans dépendre d'un moteur de layout externe. Les nœuds sont
 colorés par statut de conclusion (`draft`/`running`/`concluded`/`abandoned`) et chaque pointe de
 branche est étiquetée.
+
+## Structure du projet
+
+Le code de la bibliothèque (`follow/`) est rangé par rôle (modèle de domaine, utilitaires de
+chemins, génération de plans DOE, persistance, mise en forme, points d'entrée CLI/menu, API web) :
+voir [`follow/README.md`](follow/README.md) pour le détail dossier par dossier et fichier par
+fichier. Le reste du dépôt :
+
+```
+demos/      scripts autonomes qui génèrent les rapports HTML de démonstration (demos/output/)
+examples/   Structure de domaine d'exemple (recette, MOSFET, cellule solaire...) réutilisées
+            par les démos et les tests
+tests/      suite pytest, un fichier par module/thème (miroir approximatif de follow/)
+docs/       guide Sphinx (docs/*.rst) + référence API générée depuis les docstrings
+```
 
 ## Développer
 

@@ -2,7 +2,7 @@ import pytest
 
 from examples.recipe import BakeStep, CakeRecipe
 from follow import ExperimentNotFoundError, FollowError, Quantity, Repository
-from follow.storage import JsonFileStore, MemoryStore, ObjectStore
+from follow.storage.backends import JsonFileStore, MemoryStore, ObjectStore
 
 
 def _cake(flour_g: float) -> CakeRecipe:

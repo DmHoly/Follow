@@ -1,4 +1,4 @@
-"""Thin re-export: the actual theme now lives in :mod:`follow.report` (a first-class library
+"""Thin re-export: the actual theme now lives in :mod:`follow.presentation.report` (a first-class library
 feature, not a demo-only concern) so that ``follow report``/``render_study_html`` and these
 hand-curated demos share one visual system. Kept so existing demo scripts don't need to change
 their imports.
@@ -6,7 +6,7 @@ their imports.
 
 from __future__ import annotations
 
-from follow.report import (
+from follow.presentation.report import (
     THEME_CSS,
     batch_table,
     experiment_fiche,

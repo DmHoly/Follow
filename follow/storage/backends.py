@@ -1,6 +1,6 @@
 """Where a repository's experiments and refs are kept - and how to keep them somewhere else.
 
-:class:`~follow.repository.Repository` used to be its own storage backend: ``if self.path is not
+:class:`~follow.storage.repository.Repository` used to be its own storage backend: ``if self.path is not
 None`` guarded every write, the JSON layout was inlined in its methods, and the in-memory case
 was that same code path with the guards falsy. Two things followed. Changing the backend (SQLite,
 an object store, a remote) meant editing the class that also holds the commit rules; and testing
@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .commit_form import CommitForm
-    from .models import Experiment
+    from ..core.models import Experiment
 
 
 def write_atomic(path: Path, text: str) -> None:
@@ -31,7 +31,7 @@ def write_atomic(path: Path, text: str) -> None:
     A plain ``write_text`` truncates the file and then fills it: interrupt it - Ctrl-C, a full
     disk, a crash - and what is left on disk is a *half* file. For ``refs.json`` that is not an
     inconvenience but a repository whose branches no longer name real objects, i.e. exactly the
-    state :class:`~follow.errors.DanglingRefError` reports. Writing to a temporary file in the
+    state :class:`~follow.core.errors.DanglingRefError` reports. Writing to a temporary file in the
     same directory and then ``os.replace``-ing it over the target makes the swap atomic on POSIX
     and on Windows, so the old file stands until the new one is complete.
 
@@ -96,7 +96,7 @@ class JsonFileStore(ObjectStore):
         self.path = Path(path)
 
     def load(self) -> tuple[dict[str, "Experiment"], dict[str, str], dict[str, str]]:
-        from .models import Experiment
+        from ..core.models import Experiment
 
         experiments: dict[str, Experiment] = {}
         branches: dict[str, str] = {}

@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from follow.cli import main
+from follow.interfaces.cli import main
 
 CAKE_STRUCT = {
     "name": "Vanilla cake",

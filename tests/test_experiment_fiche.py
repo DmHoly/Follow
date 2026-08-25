@@ -5,7 +5,7 @@ tests/test_report.py, which exercises the fully automatic render_study_html.
 
 from examples.recipe import BakeStep, CakeRecipe
 from follow import BatchFactor, BatchVariation, Quantity, Repository, render_study_html
-from follow.report import batch_table, experiment_fiche, objectives_table, render_page, results_table
+from follow.presentation.report import batch_table, experiment_fiche, objectives_table, render_page, results_table
 
 
 def _cake() -> CakeRecipe:

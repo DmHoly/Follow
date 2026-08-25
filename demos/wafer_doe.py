@@ -3,18 +3,18 @@ conclusion - whose Structure is a lot of 25 wafers split across a 5x5 semi-facto
 (implant dose x anneal temperature). It's still one commit, but "one commit, 25 variants"
 needs a hybrid display: the experiment-level fiche (this lot, as a whole), and the same lot
 "exploded" entity by entity to see which parameters were actually varied. That's exactly what
-follow.batch.analyze_batch + follow.report.batch_table give you, on top of the same Structure
+follow.doe.batch.analyze_batch + follow.presentation.report.batch_table give you, on top of the same Structure
 composition (WaferLot.wafers: list[Wafer]) Follow already supports - nothing new in the core
 engine, just a generic N-way comparison over a list field.
 
-The 25 wafers themselves are generated, not hand-written: follow.design.full_factorial crosses
-the two factors' value grids (follow.design.lin, a thin numpy.linspace wrapper) against a single
+The 25 wafers themselves are generated, not hand-written: follow.doe.design.full_factorial crosses
+the two factors' value grids (follow.doe.design.lin, a thin numpy.linspace wrapper) against a single
 reference Wafer, so the split is defined once as "these two factors, these ranges" rather than
 copy-pasted 25 times.
 
-Each lot's fiche (follow.report.experiment_fiche) reads, top to bottom: summary (intent +
+Each lot's fiche (follow.presentation.report.experiment_fiche) reads, top to bottom: summary (intent +
 objectives), the split itself (batch_table, embedded via split=), results tied to the exact
-evidence that backs each one (follow.report.results_table - here a raw-measurements file *and*
+evidence that backs each one (follow.presentation.report.results_table - here a raw-measurements file *and*
 a Jupyter notebook doing the actual statistical analysis, since Follow never analyzes anything
 itself), and the conclusion - decision plus what happens next.
 
@@ -31,8 +31,8 @@ from demos._main import run_demo
 from demos._report import batch_table, experiment_fiche, render_report
 from examples.wafer_doe import Wafer, WaferLot
 from follow import Quantity, Repository, analyze_batch
-from follow.report import graph_section
-from follow.design import full_factorial, lin
+from follow.presentation.report import graph_section
+from follow.doe.design import full_factorial, lin
 
 _REFERENCE_WAFER = Wafer(
     slot=0,
@@ -207,7 +207,7 @@ def render(repo: Repository, *, embed_plotly: bool) -> str:
       <div class="cmt"># reproduire ce scenario</div>
       <div class="cmd">python -m demos.wafer_doe</div>
     </div>
-    <p class="credit">Généré avec <code>python -m demos.wafer_doe</code> — même moteur générique que les autres démos (recette, MOSFET, cellule solaire) : <code>follow.batch</code> n'a rien de spécifique aux wafers.</p>
+    <p class="credit">Généré avec <code>python -m demos.wafer_doe</code> — même moteur générique que les autres démos (recette, MOSFET, cellule solaire) : <code>follow.doe.batch</code> n'a rien de spécifique aux wafers.</p>
   </footer>"""
 
     return render_report(
@@ -215,14 +215,14 @@ def render(repo: Repository, *, embed_plotly: bool) -> str:
         description=(
             "Démo Follow : un split factoriel 5x5 sur 25 wafers modélisé comme une seule "
             "expérience, avec un affichage hybride (fiche d'expérience + vue explosée par "
-            "entité) via follow.batch.analyze_batch."
+            "entité) via follow.doe.batch.analyze_batch."
         ),
         eyebrow="Follow · cas d'école DOE",
         heading="Un plan factoriel sur 25 wafers, comme une seule expérience Follow",
         subtitle=(
             "Git n'a pas de notion pour « une expérience, N variantes structurelles ». Follow "
             "n'en a pas besoin : le lot est une Structure normale (une liste de wafers), et "
-            "follow.batch.analyze_batch lit mécaniquement ce qui est constant et ce qui varie "
+            "follow.doe.batch.analyze_batch lit mécaniquement ce qui est constant et ce qui varie "
             "— le même principe s'applique à des recettes, des lentilles ou des grilles de "
             "barbecue."
         ),

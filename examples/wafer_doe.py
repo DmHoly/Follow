@@ -1,6 +1,6 @@
 """A DOE (design of experiments) domain: one experiment, one lot, many wafers - each wafer got a
 different combination of process parameters, but the lot as a whole is still a single experiment
-(one intent, one protocol, one conclusion). See :mod:`follow.batch` for the generic analysis that
+(one intent, one protocol, one conclusion). See :mod:`follow.doe.batch` for the generic analysis that
 makes ``WaferLot.wafers`` useful as a DOE specifically.
 """
 

@@ -17,7 +17,7 @@ Des ``Structure`` prêtes à l'emploi, pour voir l'héritage et la composition e
 - ``examples/wafer_doe.py`` — ``Wafer`` / ``WaferLot`` (le cas d'école DOE : un lot d'entités
   suivi comme une seule expérience, utilisée par ``demos/wafer_doe.py``).
 - ``examples/chocolate_cake.py`` — ``ChocolateCake`` / ``CakeTrialBatch`` (champs plats, pensés
-  pour :mod:`follow.design` ; utilisée par ``demos/chocolate_cake_optimization.py`` et
+  pour :mod:`follow.doe.design` ; utilisée par ``demos/chocolate_cake_optimization.py`` et
   :doc:`tutorial`).
 
 Scénarios complets (``demos/``)
@@ -33,7 +33,7 @@ HTML (voir ``demos/README.md`` dans le dépôt) :
   partir de 10 recettes réelles, optimisée par 3 branches et 3 fusions séquentielles, avec une
   validation finale qui referme un écart de combinaison non testée.
 - ``demos/auto_report.py`` — le même dépôt que ``chocolate_fondant.py``, rendu par
-  :func:`~follow.report.render_study_html` sans aucune section écrite à la main.
+  :func:`~follow.presentation.report.render_study_html` sans aucune section écrite à la main.
 - ``demos/wafer_doe.py`` — un split factoriel 5×5 sur 25 wafers modélisé comme une seule
   expérience, avec l'affichage hybride fiche + vue explosée (:doc:`batch`).
 - ``demos/chocolate_cake_optimization.py`` — le guide complet (:doc:`tutorial`) en un seul

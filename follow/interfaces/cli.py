@@ -17,15 +17,15 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from . import __version__
-from .batch import analyze_batch
-from .entities import find_entity_mentions
-from .formatting import format_value
-from .graphing import render_graph_html
-from .rendering import log_line, render_fiche
-from .report import batch_table, escape_html, render_page, render_study_html
-from .repository import FollowError, Repository
-from .structure import Structure
+from .. import __version__
+from ..doe.batch import analyze_batch
+from ..paths.entities import find_entity_mentions
+from ..paths.formatting import format_value
+from ..presentation.graphing import render_graph_html
+from ..presentation.rendering import log_line, render_fiche
+from ..presentation.report import batch_table, escape_html, render_page, render_study_html
+from ..storage.repository import FollowError, Repository
+from ..core.structure import Structure
 
 DEFAULT_REPO = ".follow"
 

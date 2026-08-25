@@ -4,13 +4,13 @@ import copy
 import re
 from typing import Any, Iterable
 
-from .errors import MalformedPathError, PathNotFoundError
+from ..core.errors import MalformedPathError, PathNotFoundError
 
 _TOKEN = re.compile(r"\.?([^.\[\]]+)|\[(\d+)\]")
 
 
 def split_path(path: str) -> list[str | int]:
-    """Parse a dotted/indexed path (the format :class:`~follow.diffing.DiffEntry` uses, e.g.
+    """Parse a dotted/indexed path (the format :class:`~follow.paths.diffing.DiffEntry` uses, e.g.
     ``"ingredients.flour"`` or ``"steps[2].parameters.temperature"``) into the sequence of
     dict-key/list-index tokens needed to walk a dumped structure.
 
@@ -50,7 +50,7 @@ def _set(obj: Any, tokens: list[str | int], value: Any) -> None:
 def resolve_merge_paths(ours: Any, theirs: Any, take_from_theirs: Iterable[str]) -> Any:
     """Merge two dumped structures (dict/list, straight from ``model_dump``) by starting from
     ``ours`` and overwriting the given paths - in the same dotted/indexed format
-    :class:`~follow.diffing.DiffEntry` uses, so you can copy them straight out of a
+    :class:`~follow.paths.diffing.DiffEntry` uses, so you can copy them straight out of a
     ``repo.diff(...)`` listing - with the value at that path in ``theirs``.
 
     This is Follow's conflict-resolution primitive: nothing is guessed automatically, every

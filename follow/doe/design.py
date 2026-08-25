@@ -4,7 +4,7 @@ combination (see how demos/wafer_doe.py currently builds its 25-wafer lot with a
 Two halves:
 
 - Value generators (:func:`lin`, :func:`log`, :func:`arange`) - thin numpy wrappers that also
-  know how to wrap into :class:`~follow.quantity.Quantity` when a unit is given, since most real
+  know how to wrap into :class:`~follow.core.quantity.Quantity` when a unit is given, since most real
   factors are quantities, not bare floats.
 - Design builders (:func:`sweep`, :func:`full_factorial`, :func:`latin_hypercube`) - each takes a
   single reference instance (already valid, already the baseline you'd otherwise copy by hand)
@@ -27,8 +27,8 @@ from typing import Any, Sequence, TypeVar
 import numpy as np
 from pydantic import BaseModel
 
-from .errors import DesignError
-from .quantity import Quantity
+from ..core.errors import DesignError
+from ..core.quantity import Quantity
 
 T = TypeVar("T", bound=BaseModel)
 

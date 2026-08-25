@@ -11,7 +11,7 @@ libellés) pour montrer ce qui est possible avec un peu de mise en récit. Pour 
 **automatiquement**, sans rien écrire, voir `follow report` (section dédiée dans le README
 principal) et `follow.render_study_html` — qui utilisent le même thème visuel.
 
-- `_report.py` — ré-export de `follow.report` (le thème visuel et les briques HTML vivent
+- `_report.py` — ré-export de `follow.presentation.report` (le thème visuel et les briques HTML vivent
   désormais dans la bibliothèque elle-même, voir plus haut) pour que ces démos et `follow
   report` se lisent comme un seul produit plutôt que des pages ad hoc.
 - `fusion_selective.py` — une recette de gâteau à 5 étapes, une branche de test qui explore la
@@ -27,14 +27,14 @@ principal) et `follow.render_study_html` — qui utilisent le même thème visue
   automatique et une démo narrée.
 - `wafer_doe.py` — un plan factoriel 5×5 (dose d'implantation × température de recuit) sur 25
   wafers, modélisé comme une seule expérience Follow, suivi d'un lot de confirmation homogène :
-  l'affichage hybride (fiche + vue explosée par entité, `follow.batch.analyze_batch` +
-  `follow.report.batch_table`) et `follow.design.full_factorial` pour générer le split.
+  l'affichage hybride (fiche + vue explosée par entité, `follow.doe.batch.analyze_batch` +
+  `follow.presentation.report.batch_table`) et `follow.doe.design.full_factorial` pour générer le split.
 - `chocolate_cake_optimization.py` — le guide complet en un seul dépôt exécutable : déclarer une
   expérience (intention, structure, référence, objectifs), un split manuel (`sweep`), un split
   raté puis corrigé (`check_identifiability`, `full_factorial`), un plan fractionnaire
   (`fractional_factorial` + structure d'aliasing), un screening (`latin_hypercube`), une fusion
   de deux améliorations validées séparément (`repo.merge`), un formulaire de commit obligatoire
-  (`follow.commit_form`), et une validation finale. Voir `docs/tutorial.rst` pour le même
+  (`follow.storage.commit_form`), et une validation finale. Voir `docs/tutorial.rst` pour le même
   scénario narré étape par étape.
 - `entity_tracking.py` — un split nomme chaque variante d'après un nom physique réel (le moule
   utilisé, « moule vert »/« moule rouge »), puis deux expériences séparées — chacune sur sa

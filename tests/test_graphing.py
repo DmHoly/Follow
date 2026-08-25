@@ -4,7 +4,7 @@ import pytest
 
 from examples.recipe import BakeStep, CakeRecipe
 from follow import FollowError, Quantity, Repository, build_graph_figure, render_graph_html
-from follow.graphing import _depths
+from follow.presentation.graphing import _depths
 
 
 def _cake(flour_g: float) -> CakeRecipe:
@@ -120,7 +120,7 @@ def test_render_study_html_does_not_swallow_a_corrupt_lineage(monkeypatch):
     # render_study_html catches rendering failures so one bad figure doesn't cost the whole
     # report - but a corrupt repository is exactly what the reader must not be left unaware of
     from follow import render_study_html
-    import follow.report as report
+    import follow.presentation.report as report
 
     repo, *_ = _repo_with_a_fork()
 
@@ -134,7 +134,7 @@ def test_render_study_html_does_not_swallow_a_corrupt_lineage(monkeypatch):
 
 def test_render_study_html_still_survives_a_plain_rendering_failure(monkeypatch):
     from follow import render_study_html
-    import follow.report as report
+    import follow.presentation.report as report
 
     repo, *_ = _repo_with_a_fork()
 

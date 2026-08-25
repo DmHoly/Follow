@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from .diffing import diff_structures
-from .formatting import format_value, is_quantity_leaf
-from .models import Experiment
+from ..paths.diffing import diff_structures
+from ..paths.formatting import format_value, is_quantity_leaf
+from ..core.models import Experiment
 
 if TYPE_CHECKING:
-    from .repository import Repository
+    from ..storage.repository import Repository
 
 
 def _render_structure_lines(value: Any, indent: int = 0) -> list[str]:

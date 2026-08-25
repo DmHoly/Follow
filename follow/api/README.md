@@ -86,7 +86,7 @@ dépôt (pas seulement la lignée d'une branche), filtrées sur `conclusion.stat
 ### Fiche d'une expérience (`/app/experience/<id>`)
 
 `GET /api/experiments/{ref}` renvoie l'expérience et sa fiche déjà rendue en Markdown
-(`fiche_markdown`, produite par `follow.rendering.render_fiche` — la même fonction que la CLI).
+(`fiche_markdown`, produite par `follow.presentation.rendering.render_fiche` — la même fonction que la CLI).
 Si l'expérience a une référence `baseline`, un second appel à `GET /api/diff?a=&b=` affiche le
 diff structurel juste au-dessus.
 
@@ -95,7 +95,7 @@ diff structurel juste au-dessus.
 ### Graphe de filiation (`/app/graphe`)
 
 Une `<iframe>` pointant sur `GET /api/graph.html`, qui renvoie une page Plotly autonome (même
-figure que `follow graph` écrit sur disque, via `follow.graphing.build_graph_figure`).
+figure que `follow graph` écrit sur disque, via `follow.presentation.graphing.build_graph_figure`).
 
 ![Graphe de filiation](screenshots/06-graphe.png)
 
@@ -108,7 +108,7 @@ sections repliables (`<details>`). `GET /api/commit_form` ajoute les champs du f
 commit du dépôt s'il y en a un. La soumission fait un seul `POST /api/experiments` (création +
 commit en un temps, pas d'étape brouillon côté API).
 
-Un champ nommé `entity_id` (la convention de `follow.entities` pour identifier une chose
+Un champ nommé `entity_id` (la convention de `follow.paths.entities` pour identifier une chose
 physique - moule, wafer, échantillon) est repéré et mis en avant (🏷️, aide contextuelle),
 au lieu de rester noyé dans le reste du formulaire de structure.
 
@@ -117,7 +117,7 @@ au lieu de rester noyé dans le reste du formulaire de structure.
 ### Générateur de plan (DOE)
 
 Tout champ `list[X]` d'une structure, où `X` est lui-même un type `Structure` enregistré (ex.
-`WaferLot.wafers: list[Wafer]` - un lot, plusieurs wafers, voir `follow.batch`), est détecté
+`WaferLot.wafers: list[Wafer]` - un lot, plusieurs wafers, voir `follow.doe.batch`), est détecté
 automatiquement (`GET /api/structures/{key}/batch-fields`) et reçoit, en plus de l'éditeur
 ligne-par-ligne habituel, un panneau repliable **"Générer un plan (DOE)"** :
 
@@ -125,10 +125,10 @@ ligne-par-ligne habituel, un panneau repliable **"Générer un plan (DOE)"** :
    que la structure principale) ;
 2. un type de plan - balayage (`sweep`), factoriel complet (`full_factorial`), hypercube latin
    (`latin_hypercube`) - et ses facteurs/niveaux ;
-3. un aperçu (`POST /api/design/generate`, qui appelle directement `follow.design` +
-   `follow.batch.analyze_batch`) : la matrice résultante (constant vs variable, une colonne par
+3. un aperçu (`POST /api/design/generate`, qui appelle directement `follow.doe.design` +
+   `follow.doe.batch.analyze_batch`) : la matrice résultante (constant vs variable, une colonne par
    facteur), et une alerte si deux facteurs varient ensemble au point de ne plus être
-   statistiquement séparables (`follow.design.check_identifiability`) ;
+   statistiquement séparables (`follow.doe.design.check_identifiability`) ;
 4. "Utiliser ce plan" remplace le contenu de l'éditeur par les entités générées - toujours
    éditables à la main ensuite.
 

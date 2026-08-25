@@ -1,8 +1,8 @@
 """An interactive, menu-driven front-end for the CLI (``follow menu``): navigate experiments,
 start one, follow its history, close it out, merge, report - without memorizing subcommands and
-flags. This wraps the exact same :class:`~follow.repository.Repository`/
-:class:`~follow.repository.ExperimentBuilder` API the scriptable ``new``/``derive``/``commit``/
-``merge`` subcommands use (see :mod:`follow.cli`) - nothing here is a second implementation of
+flags. This wraps the exact same :class:`~follow.storage.repository.Repository`/
+:class:`~follow.storage.repository.ExperimentBuilder` API the scriptable ``new``/``derive``/``commit``/
+``merge`` subcommands use (see :mod:`follow.interfaces.cli`) - nothing here is a second implementation of
 the engine, just a friendlier way to drive it. The scriptable subcommands are unaffected and
 remain the way to drive Follow from scripts/CI.
 
@@ -35,13 +35,13 @@ from typing import Any, Callable
 from pydantic import ValidationError
 
 from .cli import DEFAULT_REPO, _load_structure_class, _print_form_hint, _read_structure_payload, _repo
-from .diffing import DiffEntry
-from .graphing import render_graph_html
-from .models import Experiment
-from .quantity import Quantity
-from .rendering import render_fiche
-from .report import render_study_html
-from .repository import ExperimentBuilder, FollowError, Repository
+from ..paths.diffing import DiffEntry
+from ..presentation.graphing import render_graph_html
+from ..core.models import Experiment
+from ..core.quantity import Quantity
+from ..presentation.rendering import render_fiche
+from ..presentation.report import render_study_html
+from ..storage.repository import ExperimentBuilder, FollowError, Repository
 
 try:
     import questionary
@@ -150,7 +150,7 @@ def _collect_conclusion(builder: ExperimentBuilder) -> None:
 
 
 def _collect_form_answers(repo: Repository, builder: ExperimentBuilder) -> None:
-    """Prompt for the repository's commit form (see :mod:`follow.commit_form`), if one is
+    """Prompt for the repository's commit form (see :mod:`follow.storage.commit_form`), if one is
     configured - skipped entirely for a repository with none. Without this, a repo with a
     mandatory commit form would always reject the commit :func:`_finish` tries to make, with no
     way to have answered it first.
@@ -361,7 +361,7 @@ _QUIT = "Quitter"
 
 def run_menu(repo_path: str = DEFAULT_REPO) -> int:
     """Entry point for ``follow menu``: an interactive loop over :data:`_ACTIONS`, each wrapping
-    the same :class:`~follow.repository.Repository` calls the scriptable subcommands use. A
+    the same :class:`~follow.storage.repository.Repository` calls the scriptable subcommands use. A
     mistake in one action (a validation error, a bad path) is reported and returns to the menu
     rather than crashing the session - the same errors the scriptable CLI would raise, just not
     fatal here.

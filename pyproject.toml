@@ -63,7 +63,7 @@ api = [
 ]
 
 [project.scripts]
-follow = "follow.cli:main"
+follow = "follow.interfaces.cli:main"
 follow_api = "follow.api.cli:main"
 
 [build-system]

@@ -5,7 +5,7 @@ from typing import Any, Literal
 from pydantic import BaseModel
 
 from .formatting import format_value, is_quantity_leaf
-from .structure import Structure
+from ..core.structure import Structure
 
 _MISSING = object()
 
@@ -77,9 +77,9 @@ def diff_structures(
     """Recursively compare two structures leaf by leaf, regardless of their domain.
 
     Works on any :class:`Structure` subclass, or a plain dict/list/None straight from
-    ``model_dump`` (e.g. a list of :class:`~follow.models.Step`), without knowing anything
+    ``model_dump`` (e.g. a list of :class:`~follow.core.models.Step`), without knowing anything
     about recipes, MOSFETs or solar cells - it only walks the fields Pydantic already knows
-    about. A :class:`~follow.quantity.Quantity` (a dict with a ``value`` key) is treated as a
+    about. A :class:`~follow.core.quantity.Quantity` (a dict with a ``value`` key) is treated as a
     single leaf so e.g. a value/unit pair changes together rather than as two unrelated diffs.
     """
     before_dump = before.model_dump(mode="json") if isinstance(before, BaseModel) else ({} if before is None else before)

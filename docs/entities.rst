@@ -16,7 +16,7 @@ Le champ ``entity_id``
 --------------------------
 
 Aucune référence à poser, aucun id à recopier : donnez à n'importe quelle
-:class:`~follow.structure.Structure` (ou à une sous-structure imbriquée, par exemple une entrée
+:class:`~follow.core.structure.Structure` (ou à une sous-structure imbriquée, par exemple une entrée
 d'un ``list[...]`` de batch) un champ ``entity_id: str | None`` et attribuez-lui le nom choisi.
 
 .. code-block:: python
@@ -67,11 +67,11 @@ Retrouver l'entité
    repo.find_entity("moule-vert")
    # [<Experiment "Split moules">, <Experiment "Injection Nutella">]  -- triées par date, les deux
 
-:meth:`~follow.repository.Repository.find_entity` parcourt le dépôt entier (toutes branches, tout
+:meth:`~follow.storage.repository.Repository.find_entity` parcourt le dépôt entier (toutes branches, tout
 lignage confondu) et rend chaque expérience qui mentionne ``entity_id`` quelque part dans sa
 structure déjà stockée — la même technique de parcours générique par forme que
-:mod:`follow.diffing`/:mod:`follow.batch` utilisent déjà, ici pour trouver une feuille précise au
-lieu d'en comparer plusieurs. C'est :func:`follow.entities.find_entity_mentions` qui fait ce
+:mod:`follow.paths.diffing`/:mod:`follow.doe.batch` utilisent déjà, ici pour trouver une feuille précise au
+lieu d'en comparer plusieurs. C'est :func:`follow.paths.entities.find_entity_mentions` qui fait ce
 parcours ; ``Repository.find_entity`` l'applique à chaque expérience stockée et trie le résultat.
 
 En ligne de commande :

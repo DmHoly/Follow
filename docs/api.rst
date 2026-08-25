@@ -1,104 +1,148 @@
 Référence de l'API
 ====================
 
-follow.structure
-------------------
+follow.core
+-----------
 
-.. automodule:: follow.structure
+Modèle de domaine : la classe de base ``Structure``, les types métier (``Experiment``, ``Step``...),
+``Quantity``, la génération d'ids et la hiérarchie d'erreurs.
+
+follow.core.structure
+~~~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: follow.core.structure
    :members:
 
-follow.quantity
------------------
+follow.core.quantity
+~~~~~~~~~~~~~~~~~~~~~
 
-.. automodule:: follow.quantity
+.. automodule:: follow.core.quantity
    :members:
 
-follow.models
+follow.core.models
+~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: follow.core.models
+   :members:
+
+follow.core.ids
+~~~~~~~~~~~~~~~~
+
+.. automodule:: follow.core.ids
+   :members:
+
+follow.core.errors
+~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: follow.core.errors
+   :members:
+
+follow.paths
+------------
+
+Utilitaires génériques opérant sur une ``Structure`` déjà instanciée : chemins pointés, diff,
+formatage d'affichage, entités nommées.
+
+follow.paths.formatting
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: follow.paths.formatting
+   :members:
+
+follow.paths.merging
+~~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: follow.paths.merging
+   :members:
+
+follow.paths.diffing
+~~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: follow.paths.diffing
+   :members:
+
+follow.paths.entities
+~~~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: follow.paths.entities
+   :members:
+
+follow.doe
+----------
+
+Génération de plans d'expériences (DOE) et analyse des variantes d'un lot.
+
+follow.doe.design
+~~~~~~~~~~~~~~~~~~
+
+.. automodule:: follow.doe.design
+   :members:
+
+follow.doe.batch
+~~~~~~~~~~~~~~~~~
+
+.. automodule:: follow.doe.batch
+   :members:
+
+follow.storage
 ---------------
 
-.. automodule:: follow.models
+Persistance : dépôt (``Repository``), backends de stockage et formulaire de commit.
+
+follow.storage.repository
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: follow.storage.repository
    :members:
 
-follow.repository
+follow.storage.backends
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: follow.storage.backends
+   :members:
+
+follow.storage.commit_form
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: follow.storage.commit_form
+   :members:
+
+follow.presentation
 --------------------
 
-.. automodule:: follow.repository
+Génération de sortie destinée à un humain : rendu texte, rapports HTML, graphe de filiation.
+
+follow.presentation.rendering
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: follow.presentation.rendering
    :members:
 
-follow.diffing
------------------
+follow.presentation.report
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. automodule:: follow.diffing
+.. automodule:: follow.presentation.report
    :members:
 
-follow.merging
------------------
+follow.presentation.graphing
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. automodule:: follow.merging
+.. automodule:: follow.presentation.graphing
    :members:
 
-follow.formatting
---------------------
-
-.. automodule:: follow.formatting
-   :members:
-
-follow.rendering
--------------------
-
-.. automodule:: follow.rendering
-   :members:
-
-follow.graphing
+follow.interfaces
 ------------------
 
-.. automodule:: follow.graphing
+Points d'entrée utilisateur : la CLI scriptable et le menu interactif.
+
+follow.interfaces.cli
+~~~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: follow.interfaces.cli
    :members:
 
-follow.report
-----------------
+follow.interfaces.menu
+~~~~~~~~~~~~~~~~~~~~~~~
 
-.. automodule:: follow.report
-   :members:
-
-follow.batch
----------------
-
-.. automodule:: follow.batch
-   :members:
-
-follow.design
-----------------
-
-.. automodule:: follow.design
-   :members:
-
-follow.commit_form
-----------------------
-
-.. automodule:: follow.commit_form
-   :members:
-
-follow.entities
--------------------
-
-.. automodule:: follow.entities
-   :members:
-
-follow.ids
--------------
-
-.. automodule:: follow.ids
-   :members:
-
-follow.cli
--------------
-
-.. automodule:: follow.cli
-   :members:
-
-follow.menu
---------------
-
-.. automodule:: follow.menu
+.. automodule:: follow.interfaces.menu
    :members:

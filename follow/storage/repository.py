@@ -4,21 +4,21 @@ from pathlib import Path
 from typing import Any, Iterable, Iterator
 
 from .commit_form import CommitForm, load_commit_form
-from .diffing import StructureDiff, diff_structures
-from .entities import find_entity_mentions
-# re-exported here so `from follow.repository import FollowError` keeps working
-from .errors import (  # noqa: F401
+from ..paths.diffing import StructureDiff, diff_structures
+from ..paths.entities import find_entity_mentions
+# re-exported here so `from follow.storage.repository import FollowError` keeps working
+from ..core.errors import (  # noqa: F401
     DanglingRefError,
     ExperimentNotFoundError,
     FollowError,
     MergeError,
     NothingToCommitError,
 )
-from .ids import content_id
-from .merging import resolve_merge_paths
-from .models import Conclusion, Evidence, Experiment, Objective, ReferenceLink, Step, steps_by_order, utcnow
-from .storage import JsonFileStore, MemoryStore, ObjectStore
-from .structure import Structure
+from ..core.ids import content_id
+from ..paths.merging import resolve_merge_paths
+from ..core.models import Conclusion, Evidence, Experiment, Objective, ReferenceLink, Step, steps_by_order, utcnow
+from .backends import JsonFileStore, MemoryStore, ObjectStore
+from ..core.structure import Structure
 
 
 def _step_order_key(entry: Any) -> tuple[int, str]:
@@ -100,7 +100,7 @@ class ExperimentBuilder:
         return self
 
     def answer_form(self, **answers: Any) -> "ExperimentBuilder":
-        """Record answers to the repository's commit form (see :mod:`follow.commit_form`).
+        """Record answers to the repository's commit form (see :mod:`follow.storage.commit_form`).
         Merges into any answers already set - call it more than once to fill the form
         incrementally. Not validated until :meth:`commit`, so a typo'd field name only shows up
         as an error there (alongside every other problem, not just this one).
@@ -142,7 +142,7 @@ class ExperimentBuilder:
         commit` refusing an empty diff - rather than silently duplicating that tip or silently
         doing nothing; :meth:`Repository._commit` checks content, not object identity.
 
-        If the repository has a commit form configured (see :mod:`follow.commit_form`),
+        If the repository has a commit form configured (see :mod:`follow.storage.commit_form`),
         :attr:`form_answers` must satisfy it - see :meth:`answer_form`. A repository with no
         commit form configured accepts whatever ``form_answers`` were set (or none at all)
         without validating them.
@@ -189,13 +189,13 @@ class Repository:
 
     Pass ``path`` to persist to plain JSON files (one per experiment, plus a refs file), or
     leave it out for an in-memory repository (handy for tests and notebooks). Pass ``store`` for
-    anything else: a :class:`~follow.storage.ObjectStore` is the whole of what this class knows
+    anything else: a :class:`~follow.storage.backends.ObjectStore` is the whole of what this class knows
     about persistence, so a different backend replaces one collaborator instead of editing the
     class that also holds the commit rules.
 
     Pass ``commit_form`` (a path to a YAML template, or an already-loaded
-    :class:`~follow.commit_form.CommitForm`) to make answering it mandatory before any commit is
-    accepted - see :mod:`follow.commit_form`. Left unset, a persisted repository still picks up
+    :class:`~follow.storage.commit_form.CommitForm`) to make answering it mandatory before any commit is
+    accepted - see :mod:`follow.storage.commit_form`. Left unset, a persisted repository still picks up
     ``<path>/commit_form.yml`` automatically if that file exists, so dropping one into an
     existing repository's directory is enough to start requiring it from then on.
     """
@@ -324,8 +324,8 @@ class Repository:
         compares their structure - use it to find the ``<order>``/``<order>.field`` paths to pass
         to :meth:`merge`'s ``take_steps``.
 
-        Steps are matched on their :attr:`~follow.models.Step.order`, not on their position (see
-        :func:`~follow.models.steps_by_order`), so inserting a step at the top of one protocol
+        Steps are matched on their :attr:`~follow.core.models.Step.order`, not on their position (see
+        :func:`~follow.core.models.steps_by_order`), so inserting a step at the top of one protocol
         reports one added step rather than claiming every later step changed. A path therefore
         reads ``3.parameters.temperature``: the step *numbered* 3, the one the fiche shows as
         "3.", whichever slot it occupies in the list.
@@ -336,7 +336,7 @@ class Repository:
 
     def find_entity(self, entity_id: str) -> list[Experiment]:
         """Every experiment in this repository that mentions the physical entity
-        ``entity_id`` (see :mod:`follow.entities`), oldest first.
+        ``entity_id`` (see :mod:`follow.paths.entities`), oldest first.
 
         This crosses branches and git lineage entirely: an experiment naming
         ``entity_id="moule-vert"`` inside a batch, and a later, unrelated experiment that
@@ -455,7 +455,7 @@ class Repository:
         manual conflict resolution: ``take_structure``/``take_steps`` list the paths (in the
         format :meth:`diff`/:meth:`diff_steps` report) whose value should come from ``ref_b``
         instead of ``ref_a``; every path you don't list keeps ``ref_a``'s value. A ``take_steps``
-        path names a step by its :attr:`~follow.models.Step.order` - ``"3"`` for the whole step
+        path names a step by its :attr:`~follow.core.models.Step.order` - ``"3"`` for the whole step
         numbered 3, ``"3.parameters.temperature"`` for one of its parameters - not by its slot in
         the list, so it keeps meaning the same step when the two protocols differ in length. The result gets
         both tips as parents (so the graph records the merge like git does), carries over
@@ -686,7 +686,7 @@ class Repository:
 
     # -- persistence -----------------------------------------------------------------
     #
-    # Nothing here decides *how* anything is stored - see follow.storage. What is left is when:
+    # Nothing here decides *how* anything is stored - see follow.storage.backends. What is left is when:
     # an experiment is written once, on commit; the refs whenever a pointer moves.
 
     def _persist_refs(self) -> None:

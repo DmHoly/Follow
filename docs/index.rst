@@ -23,13 +23,13 @@ Concepts
    * - Concept
      - Rôle
      - Équivalent git
-   * - :class:`~follow.structure.Structure`
+   * - :class:`~follow.core.structure.Structure`
      - La chose étudiée : sa configuration, modélisée en Pydantic avec héritage et composition libres.
      - le contenu versionné
-   * - :class:`~follow.models.Experiment`
+   * - :class:`~follow.core.models.Experiment`
      - Un nœud immuable : intention, structure, étapes, objectifs, références, preuves, conclusion.
      - un commit
-   * - :class:`~follow.repository.Repository`
+   * - :class:`~follow.storage.repository.Repository`
      - Le graphe complet d'expériences, plus les branches/tags.
      - le dépôt
    * - Branche
@@ -38,25 +38,25 @@ Concepts
    * - Tag
      - Pointeur immuable vers une expérience précise.
      - un tag
-   * - :class:`~follow.models.ReferenceLink`
+   * - :class:`~follow.core.models.ReferenceLink`
      - Un point de comparaison (baseline, contrôle, littérature...), pas forcément un ancêtre.
      - —
-   * - :func:`~follow.diffing.diff_structures`
+   * - :func:`~follow.paths.diffing.diff_structures`
      - Différence générique, par introspection Pydantic, entre deux structures.
      - ``git diff``
-   * - :func:`~follow.report.render_study_html`
+   * - :func:`~follow.presentation.report.render_study_html`
      - Compte rendu d'étude généré automatiquement, sans IA.
      - ``git log`` / un rapport CI
-   * - :func:`~follow.batch.analyze_batch`
+   * - :func:`~follow.doe.batch.analyze_batch`
      - Une expérience, N variantes structurelles (DOE) : sépare la base commune des facteurs qui varient.
      - — (pas d'équivalent git)
-   * - :meth:`~follow.repository.Repository.find_entity`
+   * - :meth:`~follow.storage.repository.Repository.find_entity`
      - Une même entité physique (nommée via ``entity_id``), retrouvée entre plusieurs expériences séparées.
      - — (pas d'équivalent git)
-   * - :func:`~follow.design.full_factorial`
+   * - :func:`~follow.doe.design.full_factorial`
      - Génère les variantes d'un split (DOE) depuis une structure de référence, sans les recopier à la main.
      - — (pas d'équivalent git)
-   * - :class:`~follow.commit_form.CommitForm`
+   * - :class:`~follow.storage.commit_form.CommitForm`
      - Questionnaire YAML obligatoire à chaque commit d'un dépôt donné.
      - un modèle de PR obligatoire
 

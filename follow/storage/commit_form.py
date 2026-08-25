@@ -1,4 +1,4 @@
-"""A YAML-defined questionnaire a :class:`~follow.repository.Repository` can require answers to
+"""A YAML-defined questionnaire a :class:`~follow.storage.repository.Repository` can require answers to
 before it accepts a commit - metadata that isn't part of the domain ``Structure`` (an operator
 name, a fab run id, why this particular split was chosen, whether crossed factors were checked
 for confounding...) but that you want captured, structured, and validated every time, not left
@@ -18,8 +18,8 @@ from typing import Any, Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-# re-exported so `from follow.commit_form import FormValidationError` keeps working
-from .errors import FormValidationError  # noqa: F401
+# re-exported so `from follow.storage.commit_form import FormValidationError` keeps working
+from ..core.errors import FormValidationError  # noqa: F401
 
 
 class FormField(BaseModel):
@@ -63,7 +63,7 @@ class FormField(BaseModel):
 
 class CommitForm(BaseModel):
     """A questionnaire template: a title plus an ordered list of :class:`FormField`. Attach one
-    to a :class:`~follow.repository.Repository` (via ``commit_form=`` or a ``commit_form.yml``
+    to a :class:`~follow.storage.repository.Repository` (via ``commit_form=`` or a ``commit_form.yml``
     file dropped into the repository directory) to make answering it mandatory before any commit
     is accepted.
     """

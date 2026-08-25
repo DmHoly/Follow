@@ -28,9 +28,9 @@ supprimer une étape au milieu d'une branche se lit comme une seule suppression,
 comparaison positionnelle prétendait que chaque étape suivante avait changé.
 
 ``take_structure``/``take_steps`` listent les chemins (au même format que
-:class:`~follow.diffing.DiffEntry`, obtenus via :meth:`Repository.diff()
-<follow.repository.Repository.diff>`/:meth:`Repository.diff_steps()
-<follow.repository.Repository.diff_steps>`) dont la valeur doit venir du second réf plutôt que
+:class:`~follow.paths.diffing.DiffEntry`, obtenus via :meth:`Repository.diff()
+<follow.storage.repository.Repository.diff>`/:meth:`Repository.diff_steps()
+<follow.storage.repository.Repository.diff_steps>`) dont la valeur doit venir du second réf plutôt que
 du premier. Tout chemin non listé garde la valeur du premier réf — exactement comme un hunk de
 ``git merge`` qu'on ne touche pas.
 
@@ -38,15 +38,15 @@ Le résultat porte les deux pointes comme parents (``merged.parents`` contient l
 deux références automatiques : ``baseline`` vers le premier parent, ``merge_source`` vers le
 second.
 
-Résolution manuelle avec :func:`~follow.merging.resolve_merge_paths`
+Résolution manuelle avec :func:`~follow.paths.merging.resolve_merge_paths`
 ------------------------------------------------------------------------
 
-:meth:`Repository.merge() <follow.repository.Repository.merge>` s'appuie sur
-:func:`follow.merging.resolve_merge_paths`, directement réutilisable :
+:meth:`Repository.merge() <follow.storage.repository.Repository.merge>` s'appuie sur
+:func:`follow.paths.merging.resolve_merge_paths`, directement réutilisable :
 
 .. code-block:: python
 
-   from follow.merging import resolve_merge_paths
+   from follow.paths.merging import resolve_merge_paths
 
    # sur un dump quelconque : "[2]" indexe une liste, "3" une clé de dict
    merged_dump = resolve_merge_paths(ours=our_dump, theirs=their_dump, take_from_theirs=["ingredients.farine"])

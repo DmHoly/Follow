@@ -25,8 +25,8 @@ from follow import (
     analyze_batch,
     format_value,
 )
-from follow.commit_form import CommitForm
-from follow.merging import split_path
+from follow.storage.commit_form import CommitForm
+from follow.paths.merging import split_path
 
 
 def _cake(flour_g: float = 200) -> CakeRecipe:
@@ -418,7 +418,7 @@ def test_an_interrupted_write_leaves_the_previous_refs_file_intact(tmp_path, mon
     # Regression: refs.json was written with a plain write_text, which truncates first and fills
     # second - an interruption in between left a half file, i.e. a repository whose branches no
     # longer name real objects.
-    import follow.storage as storage_module  # where the atomic write now lives
+    import follow.storage.backends as storage_module  # where the atomic write now lives
 
     repo = Repository(tmp_path)
     repo.new(branch="main", structure=_cake(), title="v1", intent="x").commit()

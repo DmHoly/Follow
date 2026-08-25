@@ -6,10 +6,10 @@ from typing import TYPE_CHECKING
 
 import plotly.graph_objects as go
 
-from .repository import FollowError
+from ..core.errors import FollowError
 
 if TYPE_CHECKING:
-    from .repository import Repository
+    from ..storage.repository import Repository
 
 _STATUS_COLORS = {
     "draft": "#9e9e9e",
@@ -31,7 +31,7 @@ def _depths(dag: dict[str, list[str]]) -> dict[str, int]:
     ``RecursionError`` in the next. Iteration removes the failure mode entirely, whatever the
     order.
 
-    A cycle raises :class:`~follow.repository.FollowError`. Lineage cycles cannot occur in a
+    A cycle raises :class:`~follow.storage.repository.FollowError`. Lineage cycles cannot occur in a
     healthy repository (a commit's id is derived from content that already includes its parents,
     so a parent always exists before its child), which is exactly why one means the repository is
     corrupt - and drawing a plausible-looking graph with silently wrong depths, as the previous
