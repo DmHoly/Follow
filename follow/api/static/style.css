@@ -9,7 +9,37 @@
   --added: #3d7a4f;
   --removed: #b0453e;
   --changed: #b48a2c;
+  --shadow: 0 1px 2px rgba(35, 33, 29, 0.06);
   font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #1c1a17;
+    --panel: #262320;
+    --border: #3a362f;
+    --ink: #ece8e1;
+    --muted: #9a9388;
+    --accent: #c9915f;
+    --accent-ink: #1c1a17;
+    --added: #6fc98a;
+    --removed: #e8867c;
+    --changed: #e0b95c;
+    --shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #1c1a17;
+  --panel: #262320;
+  --border: #3a362f;
+  --ink: #ece8e1;
+  --muted: #9a9388;
+  --accent: #c9915f;
+  --accent-ink: #1c1a17;
+  --added: #6fc98a;
+  --removed: #e8867c;
+  --changed: #e0b95c;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
 }
 
 * { box-sizing: border-box; }
@@ -22,6 +52,18 @@ body {
 }
 
 a { color: var(--accent); }
+
+/* Keyboard-visible focus ring everywhere, without the mouse-click halo browsers add by default. */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+.stat-tile:focus-visible,
+.log-entry:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 
 #layout { display: flex; flex-direction: column; min-height: 100vh; }
 
@@ -40,8 +82,10 @@ a { color: var(--accent); }
 #topnav button {
   background: none; color: var(--muted); border: none; padding: 0.4rem 0.6rem;
   border-radius: 6px; font-size: 0.85rem; cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
 }
-#topnav button:hover, #topnav button.active { background: var(--bg); color: var(--ink); }
+#topnav button:hover { background: var(--bg); color: var(--ink); }
+#topnav button.active { background: var(--accent); color: var(--accent-ink); }
 #topnav .navlink { margin-left: auto; font-size: 0.85rem; text-decoration: none; }
 
 #body { display: flex; flex: 1; min-height: 0; }
@@ -74,6 +118,9 @@ h2 { font-size: 1rem; margin: 1.5rem 0 0.5rem; color: var(--muted); text-transfo
 .ref-list li { margin-bottom: 0.15rem; }
 .ref-list button {
   width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
   text-align: left;
   background: none;
   border: none;
@@ -82,9 +129,13 @@ h2 { font-size: 1rem; margin: 1.5rem 0 0.5rem; color: var(--muted); text-transfo
   cursor: pointer;
   font-size: 0.85rem;
   color: var(--ink);
+  transition: background-color 0.12s ease;
 }
 .ref-list button:hover { background: var(--bg); }
 .ref-list button.active { background: var(--accent); color: var(--accent-ink); }
+.ref-list .ref-icon { opacity: 0.6; font-size: 0.75rem; flex-shrink: 0; }
+.ref-list button.active .ref-icon { opacity: 0.85; }
+.ref-list .ref-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 button, .btn {
   background: var(--accent);
@@ -94,9 +145,14 @@ button, .btn {
   border-radius: 6px;
   cursor: pointer;
   font-size: 0.85rem;
+  transition: filter 0.12s ease, transform 0.05s ease;
 }
+button:hover { filter: brightness(1.08); }
+button:active { transform: translateY(1px); }
 button.secondary { background: var(--panel); color: var(--ink); border: 1px solid var(--border); }
+button.secondary:hover { filter: none; background: var(--bg); }
 button:disabled { opacity: 0.5; cursor: default; }
+button:disabled:hover { filter: none; }
 
 .card {
   background: var(--panel);
@@ -104,18 +160,22 @@ button:disabled { opacity: 0.5; cursor: default; }
   border-radius: 10px;
   padding: 1rem;
   margin-bottom: 1rem;
+  box-shadow: var(--shadow);
 }
 
 .log-entry {
   display: flex;
   gap: 0.5rem;
   align-items: baseline;
-  padding: 0.4rem 0;
+  padding: 0.5rem 0.4rem;
+  margin: 0 -0.4rem;
+  border-radius: 6px;
   border-bottom: 1px solid var(--border);
   cursor: pointer;
   font-size: 0.85rem;
+  transition: background-color 0.12s ease;
 }
-.log-entry:hover { color: var(--accent); }
+.log-entry:hover { background: var(--bg); color: var(--accent); }
 .log-entry .id { font-family: monospace; color: var(--muted); }
 .log-entry .status { margin-left: auto; font-size: 0.75rem; color: var(--muted); }
 
@@ -161,12 +221,20 @@ pre.fiche { white-space: pre-wrap; font-size: 0.85rem; background: var(--bg); pa
 .row > div { flex: 1; }
 
 .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 0.75rem; margin-bottom: 1.25rem; }
-.stat-tile { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 0.9rem 1rem; cursor: pointer; }
-.stat-tile:hover { border-color: var(--accent); }
+.stat-tile {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  padding: 0.9rem 1rem; cursor: pointer; box-shadow: var(--shadow);
+  transition: border-color 0.12s ease, transform 0.08s ease;
+}
+.stat-tile:hover { border-color: var(--accent); transform: translateY(-1px); }
 .stat-tile .n { font-size: 1.6rem; font-weight: 600; display: block; }
 .stat-tile .label { font-size: 0.78rem; color: var(--muted); }
 
-.example-card { display: block; text-decoration: none; color: inherit; }
+.example-card {
+  display: block; text-decoration: none; color: inherit;
+  transition: border-color 0.12s ease;
+}
+.example-card:hover { border-color: var(--accent); }
 .example-card h3 { margin: 0 0 0.3rem; font-size: 0.95rem; color: var(--ink); }
 .example-card p { margin: 0; font-size: 0.82rem; color: var(--muted); line-height: 1.5; }
 
@@ -211,3 +279,49 @@ details.collapsible[open] > summary { border-bottom: 1px solid var(--border); }
 .doe-table th { background: var(--bg); font-weight: 600; }
 .doe-table-wrap { overflow-x: auto; }
 .doe-warning { background: #fdf3e3; border: 1px solid var(--changed); color: #6b5311; padding: 0.5rem 0.7rem; border-radius: 8px; font-size: 0.82rem; margin-top: 0.5rem; }
+
+/* Compact single-row layout for a Quantity field (value/unit/uncertainty/note), instead of
+   four full-width stacked inputs - structure forms hold dozens of these, so this is what keeps
+   them scannable. */
+.quantity-row { display: flex; gap: 0.4rem; }
+.quantity-row .quantity-value { flex: 2; min-width: 4.5rem; }
+.quantity-row .quantity-unit { flex: 1; min-width: 3.5rem; }
+.quantity-row .quantity-uncertainty { flex: 1; min-width: 4rem; }
+.quantity-row .quantity-note { flex: 2; min-width: 5rem; }
+.quantity-row input { margin: 0; }
+.quantity-row .quantity-uncertainty input::placeholder,
+.quantity-row .quantity-note input::placeholder { color: var(--muted); }
+@media (max-width: 520px) {
+  .quantity-row { flex-wrap: wrap; }
+  .quantity-row > div { flex: 1 1 45%; }
+}
+
+.spinner {
+  display: inline-block;
+  width: 0.85em;
+  height: 0.85em;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  margin-right: 0.4em;
+  vertical-align: -0.15em;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Below this width the fixed 300px sidebar no longer leaves room for content, so it drops out
+   of the sticky side rail and stacks above the main view instead. */
+@media (max-width: 780px) {
+  #body { flex-direction: column; }
+  #sidebar {
+    width: 100%;
+    position: static;
+    max-height: none;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  #main { padding: 1.25rem 1rem; max-width: 100%; }
+  #topnav { flex-wrap: wrap; row-gap: 0.3rem; }
+  .quantity-row { flex-wrap: wrap; }
+  .quantity-row > div { flex: 1 1 45%; }
+}

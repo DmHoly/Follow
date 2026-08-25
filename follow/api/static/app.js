@@ -57,6 +57,27 @@ function collapsible(title, children, { open = false, className = "" } = {}) {
 const state = { branches: {}, tags: {}, activeRef: null, health: null };
 const view = document.getElementById("view");
 
+/** A branch or tag entry in the sidebar, with an icon distinguishing which it is and an
+ * "active" state showing which one is currently open in the log view.
+ */
+function refBtn(name, icon) {
+  return el("button", {
+    "data-ref": name,
+    class: name === state.activeRef ? "active" : "",
+    onclick: () => navigate(`/app/historique/${encodeURIComponent(name)}`),
+  }, [
+    el("span", { class: "ref-icon", text: icon }),
+    el("span", { class: "ref-name", text: name }),
+  ]);
+}
+
+/** Re-mark whichever sidebar ref button matches state.activeRef, without refetching branches/tags. */
+function highlightActiveRef() {
+  document.querySelectorAll("#branch-list button, #tag-list button").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.ref === state.activeRef);
+  });
+}
+
 async function refreshSidebar() {
   const health = await get("/api/health");
   state.health = health;
@@ -67,16 +88,12 @@ async function refreshSidebar() {
   const branchList = document.getElementById("branch-list");
   clear(branchList);
   for (const name of Object.keys(state.branches).sort()) {
-    branchList.appendChild(el("li", {}, [
-      el("button", { text: name, onclick: () => navigate(`/app/historique/${encodeURIComponent(name)}`) }),
-    ]));
+    branchList.appendChild(el("li", {}, [refBtn(name, "⎇")]));
   }
   const tagList = document.getElementById("tag-list");
   clear(tagList);
   for (const name of Object.keys(state.tags).sort()) {
-    tagList.appendChild(el("li", {}, [
-      el("button", { text: name, onclick: () => navigate(`/app/historique/${encodeURIComponent(name)}`) }),
-    ]));
+    tagList.appendChild(el("li", {}, [refBtn(name, "🏷")]));
   }
 }
 
@@ -183,6 +200,7 @@ const LOG_PAGE_SIZE = 25;
 
 async function showLog(ref, offset = 0) {
   state.activeRef = ref;
+  highlightActiveRef();
   clear(view);
   view.appendChild(el("h1", { text: `Historique — ${ref}` }));
   const card = el("div", { class: "card" });
@@ -266,7 +284,7 @@ async function showExperiment(id) {
     }
 
     for (const field of data.batch_fields || []) {
-      const panelBody = el("div", { class: "muted", text: "chargement…" });
+      const panelBody = el("div", { class: "muted" }, [el("span", { class: "spinner" }), el("span", { text: "chargement…" })]);
       view.appendChild(collapsible(`Matrice de split — ${field}`, [panelBody]));
       get(`/api/experiments/${encodeURIComponent(exp.id)}/batch/${encodeURIComponent(field)}`)
         .then((result) => { clear(panelBody); panelBody.appendChild(renderDoeResultTable(result, { entityWord: "au total" })); })
@@ -321,6 +339,43 @@ function buildSchemaField(node, defs, initial) {
   const type = resolved.type;
 
   if (type === "object" && resolved.properties) {
+    // A Quantity (value/unit/uncertainty/note) is by far the most common leaf in a structure -
+    // every measured or specified field is one. Rendered through the generic path below it costs
+    // four full-width stacked label+input pairs; a form with a dozen such fields becomes an
+    // unreadable wall. Detected structurally (by its exact property set, not by title, since a
+    // title is metadata that user-defined schemas may not set) so it collapses into one compact
+    // row instead: value | unit | ± uncertainty | note.
+    const propNames = Object.keys(resolved.properties).sort().join(",");
+    if (propNames === "note,uncertainty,unit,value") {
+      const valueField = buildSchemaField(resolved.properties.value, defs, initial ? initial.value : undefined);
+      valueField.element.setAttribute("placeholder", "valeur");
+      const unitInput = el("input", { type: "text", placeholder: "unité" });
+      if (initial && initial.unit) unitInput.value = initial.unit;
+      const uncertaintyInput = el("input", { type: "number", step: "any", placeholder: "± incertitude" });
+      if (initial && initial.uncertainty !== undefined && initial.uncertainty !== null) uncertaintyInput.value = initial.uncertainty;
+      const noteInput = el("input", { type: "text", placeholder: "note" });
+      if (initial && initial.note) noteInput.value = initial.note;
+
+      const wrap = el("div", { class: "quantity-row" }, [
+        el("div", { class: "quantity-value" }, [valueField.element]),
+        el("div", { class: "quantity-unit" }, [unitInput]),
+        el("div", { class: "quantity-uncertainty" }, [uncertaintyInput]),
+        el("div", { class: "quantity-note" }, [noteInput]),
+      ]);
+      return {
+        element: wrap,
+        getValue() {
+          const value = valueField.getValue();
+          if (value === undefined || value === "") return undefined;
+          const out = { value };
+          if (unitInput.value.trim()) out.unit = unitInput.value.trim();
+          if (uncertaintyInput.value !== "") out.uncertainty = parseFloat(uncertaintyInput.value);
+          if (noteInput.value.trim()) out.note = noteInput.value.trim();
+          return out;
+        },
+      };
+    }
+
     const rows = {};
     const wrap = el("div", {});
     for (const [key, propSchema] of Object.entries(resolved.properties)) {
