@@ -3,13 +3,13 @@ Une expérience, plusieurs variantes (DOE)
 
 Git n'a pas de notion pour ce cas : un plan d'expériences (DOE, *design of experiments*)
 factoriel réparti sur, disons, 25 wafers reste **une seule expérience** — une intention, un
-protocole, une conclusion — mais sa :class:`~follow.structure.Structure` contient 25 entités
+protocole, une conclusion — mais sa :class:`~follow.core.structure.Structure` contient 25 entités
 (wafers, lots de pâte, formes de lentille, grilles de barbecue...) qui ont chacune reçu une
 combinaison différente de paramètres.
 
 Follow n'a rien besoin d'ajouter au moteur pour ça : une ``Structure`` a toujours pu contenir
 ``list[AutreStructure]`` (voir ``SolarModule.cells`` dans ``examples/solar_cell.py``).
-:func:`follow.batch.analyze_batch` ajoute juste l'analyse générique qui rend cette liste utile
+:func:`follow.doe.batch.analyze_batch` ajoute juste l'analyse générique qui rend cette liste utile
 *en tant que* plan d'expériences : quels paramètres sont identiques sur toutes les entités (la
 base commune) et lesquels varient réellement (les facteurs du plan) — lu mécaniquement plutôt
 que suivi à la main.
@@ -34,22 +34,22 @@ diffèrent par construction sur chaque entité et empêcheraient sinon un lot r�
 Affichage hybride
 --------------------
 
-:func:`follow.report.batch_table` rend un :class:`~follow.batch.BatchVariation` comme un bloc
-HTML (même thème que :func:`~follow.report.experiment_fiche`) : la base commune en liste plate,
+:func:`follow.presentation.report.batch_table` rend un :class:`~follow.doe.batch.BatchVariation` comme un bloc
+HTML (même thème que :func:`~follow.presentation.report.experiment_fiche`) : la base commune en liste plate,
 puis les facteurs variables "explosés" en un tableau (une ligne par paramètre, une colonne par
 entité). Deux façons de le poser :
 
 - ``standalone=True`` (défaut) : un ``.fiche-card`` autonome, à côté de la fiche habituelle de
   l'expérience — la fiche donne la vue "une expérience", le tableau donne la vue "many variantes".
 - ``standalone=False`` : un simple fragment ``.fiche-row``, pensé pour être **intégré**
-  directement dans :func:`~follow.report.experiment_fiche` via son paramètre ``split=`` — le
+  directement dans :func:`~follow.presentation.report.experiment_fiche` via son paramètre ``split=`` — le
   split apparaît alors comme une section de plus dans la même fiche, entre les objectifs et les
   résultats (voir :doc:`report`).
 
 .. code-block:: python
 
    from follow import analyze_batch, experiment_fiche
-   from follow.report import batch_table
+   from follow.presentation.report import batch_table
 
    variation = analyze_batch(lot.wafers, ignore=["slot"])
    split = batch_table(

@@ -1,6 +1,6 @@
 from examples.chocolate_cake import CakeTrialBatch, ChocolateCake
 from follow import Quantity, Repository
-from follow.entities import find_entity_mentions
+from follow.paths.entities import find_entity_mentions
 
 
 def _cake(trial_id: int = 0, entity_id: str | None = None) -> ChocolateCake:

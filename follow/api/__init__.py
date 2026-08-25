@@ -1,4 +1,4 @@
-"""HTTP surface for Follow: a FastAPI app exposing :class:`follow.repository.Repository`
+"""HTTP surface for Follow: a FastAPI app exposing :class:`follow.storage.repository.Repository`
 over REST, plus a small static GUI served from the same process (see :mod:`follow.api.app`).
 
 Process control (start/stop/status as a background server) lives in :mod:`follow.api.server`

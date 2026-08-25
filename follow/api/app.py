@@ -1,4 +1,4 @@
-"""The FastAPI application: Follow's :class:`~follow.repository.Repository` exposed as a REST
+"""The FastAPI application: Follow's :class:`~follow.storage.repository.Repository` exposed as a REST
 API, plus the static GUI (see ``follow/api/static/``) served from the same process.
 
 Only one repository is served per running app - see :func:`create_app`. Structure types are
@@ -21,16 +21,16 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ValidationError
 
-from ..batch import analyze_batch
-from ..commit_form import FormValidationError
-from ..design import DesignError, check_identifiability, fractional_factorial, full_factorial, latin_hypercube, sweep
-from ..diffing import StructureDiff
-from ..entities import list_entity_ids
-from ..errors import BatchShapeError, ExperimentNotFoundError, FollowError, MergeError, NothingToCommitError, StructureTypeError
-from ..models import Conclusion, Evidence, Experiment, Objective, ReferenceLink, Step
-from ..rendering import render_fiche
-from ..repository import Repository
-from ..structure import Structure
+from ..doe.batch import analyze_batch
+from ..storage.commit_form import FormValidationError
+from ..doe.design import DesignError, check_identifiability, fractional_factorial, full_factorial, latin_hypercube, sweep
+from ..paths.diffing import StructureDiff
+from ..paths.entities import list_entity_ids
+from ..core.errors import BatchShapeError, ExperimentNotFoundError, FollowError, MergeError, NothingToCommitError, StructureTypeError
+from ..core.models import Conclusion, Evidence, Experiment, Objective, ReferenceLink, Step
+from ..presentation.rendering import render_fiche
+from ..storage.repository import Repository
+from ..core.structure import Structure
 
 STATIC_DIR = Path(__file__).parent / "static"
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -103,9 +103,9 @@ EXAMPLES_MANIFEST = [
 def _message(exc: FollowError) -> str:
     """The plain error message for ``exc``, not ``KeyError``'s quoted-repr ``str()``.
 
-    A few of Follow's errors (:class:`~follow.errors.ExperimentNotFoundError`,
-    :class:`~follow.errors.StructureTypeError`...) are deliberately also ``KeyError`` subclasses
-    (see :mod:`follow.errors`), which means plain ``str(exc)`` returns ``repr(args[0])`` -
+    A few of Follow's errors (:class:`~follow.core.errors.ExperimentNotFoundError`,
+    :class:`~follow.core.errors.StructureTypeError`...) are deliberately also ``KeyError`` subclasses
+    (see :mod:`follow.core.errors`), which means plain ``str(exc)`` returns ``repr(args[0])`` -
     doubly-quoted and backslash-escaped - instead of the message itself. Fine for a traceback,
     ugly in a JSON ``detail`` field a GUI displays as-is.
     """
@@ -192,7 +192,7 @@ class RefRequest(BaseModel):
 
 
 class DesignPlanRequest(BaseModel):
-    """One design-of-experiments plan - see :mod:`follow.design` for what each ``type`` means.
+    """One design-of-experiments plan - see :mod:`follow.doe.design` for what each ``type`` means.
     Fields irrelevant to the chosen ``type`` are simply ignored (e.g. ``values`` for a
     ``full_factorial`` plan), rather than one request schema per plan type, to keep the endpoint
     a single shape the GUI's DOE screen can post regardless of which plan the user picked.
@@ -243,7 +243,7 @@ def _experiment_payload(experiment: Experiment, repo: Repository) -> dict[str, A
 def _list_item_structure_class(annotation: Any) -> type[Structure] | None:
     """If ``annotation`` is ``list[X]`` for some ``Structure`` subclass ``X``, return ``X`` -
     otherwise ``None``. This is how a "batch" field (an experiment holding many sibling entities,
-    e.g. ``WaferLot.wafers: list[Wafer]`` - see :mod:`follow.batch`) is told apart from an
+    e.g. ``WaferLot.wafers: list[Wafer]`` - see :mod:`follow.doe.batch`) is told apart from an
     ordinary list field, generically, from the parent model's own field annotations - no
     per-domain configuration needed for the DOE generator to find where to plug in.
     """
@@ -517,7 +517,7 @@ def create_app(
         """The lineage graph as a self-contained Plotly page - the same figure `follow graph`
         writes to a file, served directly so the GUI can embed it in an iframe.
         """
-        from ..graphing import build_graph_figure
+        from ..presentation.graphing import build_graph_figure
 
         if len(repo) == 0:
             return "<p style='font-family: sans-serif; padding: 1rem;'>Dépôt vide - rien à représenter.</p>"
@@ -529,7 +529,7 @@ def create_app(
     # would otherwise swallow every request meant for this one before it ever got a chance to run.
     @app.get("/api/experiments/{ref:path}/batch/{field}")
     def experiment_batch(ref: str, field: str) -> dict[str, Any]:
-        """The constant/varying split (:func:`~follow.batch.analyze_batch`) of one batch field
+        """The constant/varying split (:func:`~follow.doe.batch.analyze_batch`) of one batch field
         of an already-committed experiment - the same analysis ``follow explode`` renders to a
         standalone HTML page, here as JSON for the GUI's "matrice de split" panel on a fiche.
         """

@@ -1,5 +1,5 @@
 """Themed, dependency-free HTML report generation - no AI, no template engine, just Python
-f-strings over the data already sitting in a :class:`~follow.repository.Repository`.
+f-strings over the data already sitting in a :class:`~follow.storage.repository.Repository`.
 
 Two layers:
 
@@ -7,7 +7,7 @@ Two layers:
   narrative (see ``demos/``): :func:`experiment_fiche` (the complete, ergonomic per-experiment
   card - summary, objectives, an optional split, results tied to their evidence, conclusion),
   its lower-level parts (:func:`objectives_table`, :func:`results_table`, :func:`fiche_card`),
-  :func:`batch_table` (the DOE "exploded" view, see :mod:`follow.batch`), :func:`trial_card`,
+  :func:`batch_table` (the DOE "exploded" view, see :mod:`follow.doe.batch`), :func:`trial_card`,
   :func:`resolution_conflict_row`/:func:`resolution_plain_row`, and :func:`render_page`.
 - :func:`render_study_html`, which builds a full "compte rendu d'étude" report straight from a
   Repository with no hand-authoring at all: every experiment becomes an :func:`experiment_fiche`
@@ -21,15 +21,15 @@ from __future__ import annotations
 import html as _html
 from typing import TYPE_CHECKING, Any, Sequence
 
-from .batch import BatchVariation
-from .formatting import format_value
+from ..doe.batch import BatchVariation
+from ..paths.formatting import format_value
 from .graphing import build_graph_figure
-from .merging import get_path, split_path
-from .models import Evidence, Experiment, Objective, ObjectiveResult, steps_by_order
-from .repository import FollowError
+from ..paths.merging import get_path, split_path
+from ..core.models import Evidence, Experiment, Objective, ObjectiveResult, steps_by_order
+from ..core.errors import FollowError
 
 if TYPE_CHECKING:
-    from .repository import Repository
+    from ..storage.repository import Repository
 
 _FONTS = (
     "https://fonts.googleapis.com/css2?"
@@ -386,7 +386,7 @@ def batch_table(
     uniform_note: str = "Aucune variation : les entités sont identiques sur tous les paramètres relevés.",
     standalone: bool = True,
 ) -> str:
-    """Render a :class:`~follow.batch.BatchVariation` (see :func:`follow.batch.analyze_batch`) as
+    """Render a :class:`~follow.doe.batch.BatchVariation` (see :func:`follow.doe.batch.analyze_batch`) as
     the "hybrid display" a DOE-style experiment needs: the shared baseline (params identical on
     every entity) as a flat list, and the varying DOE factors "exploded" into one row per
     parameter, one column per entity.
@@ -449,7 +449,7 @@ def batch_table(
 
 def objectives_table(objectives: Sequence[Objective]) -> str:
     """A clean table of a study's objectives - what's being targeted, in which direction, and
-    why - straight from :class:`~follow.models.Objective`, instead of buried in prose. Returns
+    why - straight from :class:`~follow.core.models.Objective`, instead of buried in prose. Returns
     ``""`` (nothing rendered) when there are no objectives.
     """
     if not objectives:
@@ -484,8 +484,8 @@ def objectives_table(objectives: Sequence[Objective]) -> str:
 def results_table(objective_results: Sequence[ObjectiveResult], evidence: Sequence[Evidence]) -> str:
     """The "résultats & preuves" overview: one row per objective verdict (met/not_met/...), the
     value observed, the reasoning, and - the point of this table - which :class:`Evidence
-    <follow.models.Evidence>` backs it (:attr:`ObjectiveResult.evidence_ids
-    <follow.models.ObjectiveResult.evidence_ids>`), linked to its source. Follow never analyzes
+    <follow.core.models.Evidence>` backs it (:attr:`ObjectiveResult.evidence_ids
+    <follow.core.models.ObjectiveResult.evidence_ids>`), linked to its source. Follow never analyzes
     anything itself - that's delegated to whatever produced the evidence (a notebook, a stats
     report, a plot) - this table just makes explicit which piece of proof a given verdict rests
     on, rather than leaving "why did we decide this" to a free-text summary.
@@ -566,7 +566,7 @@ def experiment_fiche(
     evidence backing each one) → **conclusion** (decision badge, narrative, and what's next).
 
     Unlike :func:`fiche_card` (a low-level building block where the caller pre-escapes every
-    argument), this takes a real :class:`~follow.models.Experiment` and escapes its own text -
+    argument), this takes a real :class:`~follow.core.models.Experiment` and escapes its own text -
     the one-call entry point for rendering an experiment as-is. ``parents`` and ``badges_extra``
     work exactly like :func:`fiche_card`'s.
 
@@ -647,7 +647,7 @@ def experiment_fiche(
 
 def status_legend(*, neutral_label: str = "draft / running") -> str:
     """The colour key for :func:`graph_section`'s node statuses, matching
-    :data:`follow.graphing._STATUS_COLORS`. ``neutral_label`` is the only part demos ever varied.
+    :data:`follow.presentation.graphing._STATUS_COLORS`. ``neutral_label`` is the only part demos ever varied.
     """
     return f"""      <div class="graph-legend">
         <span class="legend-item good"><span class="legend-dot"></span>concluded &middot; promote</span>
@@ -719,7 +719,7 @@ def render_page(
       inserted as raw HTML, because callers legitimately compose them (``<b>12</b> commits``,
       a ``<code>main</code>`` in a sentence, whole ``<section>`` blocks). **Anything derived
       from repository data must be escaped by the caller with :func:`escape_html` before it
-      gets here** - see how :func:`follow.cli.cmd_explode` passes an experiment's own title.
+      gets here** - see how :func:`follow.interfaces.cli.cmd_explode` passes an experiment's own title.
     """
     chips = "\n".join(f'      <span class="stat-chip">{c}</span>' for c in stat_chips)
     body_sections = "\n\n".join(sections)
@@ -917,7 +917,7 @@ def render_study_html(
 
     No AI, no hand-authored narrative: every experiment becomes a section built from its own
     fields, and every merge commit is explained by diffing each of its two parents against the
-    result (:meth:`~follow.repository.Repository.diff`/``diff_steps``) to show, path by path,
+    result (:meth:`~follow.storage.repository.Repository.diff`/``diff_steps``) to show, path by path,
     which parent each value was taken from. Pass ``ref`` to report on one branch/tag's lineage
     (:meth:`Repository.log`); omit it to report on the whole repository, oldest commit first.
     """

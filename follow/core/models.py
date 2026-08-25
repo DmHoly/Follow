@@ -127,10 +127,10 @@ class Conclusion(BaseModel):
 class Experiment(BaseModel):
     """One immutable, committed node in the experiment graph - the equivalent of a git commit.
 
-    Its id is derived from its own content (see :mod:`follow.ids`), its ``parents`` record
+    Its id is derived from its own content (see :mod:`follow.core.ids`), its ``parents`` record
     lineage (what it was derived from, possibly several for a merge of two lines of work), and
     ``structure_type`` is the registry key needed to rehydrate ``structure`` back into the right
-    :class:`~follow.structure.Structure` subclass.
+    :class:`~follow.core.structure.Structure` subclass.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -158,10 +158,10 @@ class Experiment(BaseModel):
     # never-validated spirit as `metadata`. Deliberately NOT repository tags: several experiments
     # may carry the same label, and none of them creates a ref. A citable, immutable pointer to
     # one experiment is a repository tag, created explicitly with
-    # :meth:`Repository.tag <follow.repository.Repository.tag>`.
+    # :meth:`Repository.tag <follow.storage.repository.Repository.tag>`.
     tags: list[str] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
-    # answers to the repository's commit form (follow.commit_form), if one was configured -
+    # answers to the repository's commit form (follow.storage.commit_form), if one was configured -
     # validated at commit time, unlike `metadata` which is never checked against anything.
     form_answers: dict[str, Any] = Field(default_factory=dict)
 

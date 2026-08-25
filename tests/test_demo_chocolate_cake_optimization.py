@@ -1,6 +1,6 @@
 from conftest import assert_well_formed_html
 from follow import analyze_batch
-from follow.design import check_identifiability
+from follow.doe.design import check_identifiability
 
 from demos.chocolate_cake_optimization import build_repository, render
 

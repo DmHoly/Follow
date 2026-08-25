@@ -408,7 +408,7 @@ Comptées, pas estimées.
 
 | Ce qui est dupliqué | Copies | Où |
 |---|---|---|
-| Bloc Plotly + habillage `.graph-frame` | 6 | Les 5 démos + `report.py:839`. Identique jusqu'à `modeBarButtonsToRemove`. Devrait être `graph_section(repo, embed=…)` dans `follow.report`. |
+| Bloc Plotly + habillage `.graph-frame` | 6 | Les 5 démos + `report.py:839`. Identique jusqu'à `modeBarButtonsToRemove`. Devrait être `graph_section(repo, embed=…)` dans `follow.presentation.report`. |
 | `main()` de démo (argparse, mkdir, write, print) | 6 | `demos/*.py` — copie mot pour mot, seul le chemin par défaut change. |
 | Format de ligne de log | 3 | `rendering.render_log:160`, `cli.cmd_log:199`, `cli.cmd_trace:226`. Et `cli.py:25` importe `render_log`… sans l'utiliser. |
 | Fiche d'expérience, deux implémentations | 2 | `rendering.render_fiche` (Markdown) et `report.experiment_fiche` (HTML) redisent la même structure de document — et ont déjà divergé : le diff vs baseline n'existe qu'en Markdown, l'attribution de merge qu'en HTML. |

@@ -18,7 +18,7 @@ def content_id(kind: str, payload: dict[str, Any]) -> str:
     that to hold, callers must keep wall-clock fields out of ``payload``: hashing a timestamp
     would make the id depend on when it was computed rather than on what it describes, and the
     promise above would be false (see :meth:`Repository._commit
-    <follow.repository.Repository._commit>`, which excludes ``created_at``).
+    <follow.storage.repository.Repository._commit>`, which excludes ``created_at``).
     """
     canonical = json.dumps(payload, sort_keys=True, default=str)
     digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]

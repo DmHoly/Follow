@@ -14,7 +14,7 @@ from demos._main import run_demo
 from demos._report import batch_table, experiment_fiche, render_report
 from examples.chocolate_cake import CakeTrialBatch, ChocolateCake
 from follow import Quantity, Repository, analyze_batch
-from follow.report import graph_section
+from follow.presentation.report import graph_section
 
 
 def _baseline_recipe() -> ChocolateCake:

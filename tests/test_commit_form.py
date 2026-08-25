@@ -5,7 +5,7 @@ from pydantic import ValidationError
 
 from examples.recipe import BakeStep, CakeRecipe
 from follow import FormValidationError, Quantity, Repository
-from follow.commit_form import CommitForm, load_commit_form
+from follow.storage.commit_form import CommitForm, load_commit_form
 
 FORM = {
     "title": "Formulaire de commit",

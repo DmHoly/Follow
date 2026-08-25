@@ -21,7 +21,7 @@ Modéliser le domaine
 
 Une seule ``Structure``, avec tous les facteurs en champs **plats** (pas dans un ``dict``
 imbriqué comme ``examples/recipe.py``) : c'est ce qui permet aux générateurs de
-:mod:`follow.design` de cibler chaque facteur directement via ``model_copy(update={...})``.
+:mod:`follow.doe.design` de cibler chaque facteur directement via ``model_copy(update={...})``.
 
 .. code-block:: python
 
@@ -52,9 +52,9 @@ validée) **et** d'entité de lot (``CakeTrialBatch.trials``) — la structure n
 Étape 0 — Déclarer l'expérience
 ------------------------------------
 
-Une expérience se déclare avec :meth:`Repository.new() <follow.repository.Repository.new>` :
+Une expérience se déclare avec :meth:`Repository.new() <follow.storage.repository.Repository.new>` :
 intention, structure, éventuellement une hypothèse, puis on enrichit le brouillon
-(:class:`~follow.repository.ExperimentBuilder`) avant de committer.
+(:class:`~follow.storage.repository.ExperimentBuilder`) avant de committer.
 
 .. code-block:: python
 
@@ -71,7 +71,7 @@ intention, structure, éventuellement une hypothèse, puis on enrichit le brouil
    )
 
 **Une référence** — un point de comparaison qui n'est pas forcément un ancêtre
-(:class:`~follow.models.ReferenceLink`, ``role`` parmi ``baseline``/``control``/``prior_art``/
+(:class:`~follow.core.models.ReferenceLink`, ``role`` parmi ``baseline``/``control``/``prior_art``/
 ``benchmark``/``target_spec``) :
 
 .. code-block:: python
@@ -92,8 +92,8 @@ intention, structure, éventuellement une hypothèse, puis on enrichit le brouil
    b0.add_objective(name="Intensite chocolat", metric="score_gout", direction="maximize", target=8.0,
                      rationale="Note de degustation /10 sur l'intensite chocolat percue.")
 
-**Un protocole** (:meth:`~follow.repository.ExperimentBuilder.add_step`, ordonné, avec
-dépendances), **une preuve** (:meth:`~follow.repository.ExperimentBuilder.add_evidence` — un
+**Un protocole** (:meth:`~follow.storage.repository.ExperimentBuilder.add_step`, ordonné, avec
+dépendances), **une preuve** (:meth:`~follow.storage.repository.ExperimentBuilder.add_evidence` — un
 pointeur vers des données externes, jamais les données elles-mêmes), puis **une conclusion** qui
 se termine sur une prochaine étape plutôt qu'un verdict final :
 
@@ -119,7 +119,7 @@ se termine sur une prochaine étape plutôt qu'un verdict final :
    )
    baseline = b0.commit()
 
-``evidence_ids`` sur un :class:`~follow.models.ObjectiveResult` relie le verdict à **la preuve
+``evidence_ids`` sur un :class:`~follow.core.models.ObjectiveResult` relie le verdict à **la preuve
 exacte** qui le justifie — Follow n'analyse jamais rien lui-même, voir :doc:`report`.
 
 Équivalent CLI :
@@ -141,7 +141,7 @@ identifiable statistiquement — rien avec quoi le confondre.
 
 .. code-block:: python
 
-   from follow.design import lin, sweep
+   from follow.doe.design import lin, sweep
 
    t1 = repo.derive(
        baseline.id, new_branch="essai-temperature", title="Split manuel : temperature de cuisson",
@@ -163,11 +163,11 @@ identifiable statistiquement — rien avec quoi le confondre.
 
 L'erreur classique faite à la main : deux facteurs montés **ensemble** au lieu d'être croisés —
 impossible ensuite de dire lequel explique un effet observé.
-:func:`~follow.design.check_identifiability` le détecte *avant* toute interprétation :
+:func:`~follow.doe.design.check_identifiability` le détecte *avant* toute interprétation :
 
 .. code-block:: python
 
-   from follow.design import check_identifiability
+   from follow.doe.design import check_identifiability
 
    naive_trials = [
        baseline_recipe.model_copy(update={
@@ -203,12 +203,12 @@ supprimer silencieusement) évite qu'on le retente sans savoir pourquoi il a ét
 Étape 2b — Le corriger : plan factoriel complet
 ----------------------------------------------------
 
-:func:`~follow.design.full_factorial` croise **toutes** les combinaisons de **tous** les
+:func:`~follow.doe.design.full_factorial` croise **toutes** les combinaisons de **tous** les
 facteurs — toujours identifiable, par construction :
 
 .. code-block:: python
 
-   from follow.design import full_factorial
+   from follow.doe.design import full_factorial
 
    sb_trials = full_factorial(
        baseline_recipe, id_field="trial_id",
@@ -227,12 +227,12 @@ facteurs — toujours identifiable, par construction :
 
 16 essais pour 2 facteurs, c'est peu ; pour 4 facteurs un factoriel complet en demanderait 16
 aussi (2^4) — un **plan fractionnaire** réduit ce nombre en dérivant un facteur comme le produit
-d'autres, au prix d'un aliasing que :func:`~follow.design.fractional_factorial` calcule
+d'autres, au prix d'un aliasing que :func:`~follow.doe.design.fractional_factorial` calcule
 explicitement plutôt que de le laisser à découvrir après coup :
 
 .. code-block:: python
 
-   from follow.design import fractional_factorial
+   from follow.doe.design import fractional_factorial
 
    frac = fractional_factorial(
        baseline_recipe,
@@ -267,12 +267,12 @@ interactions à 3+ facteurs — généralement négligeables, donc le plan reste
 ------------------------------------------------------------
 
 Pour vérifier qu'aucune zone inattendue ne bat les optima déjà trouvés, sans présupposer quels
-facteurs comptent : :func:`~follow.design.latin_hypercube` répartit ``n`` essais aléatoirement
+facteurs comptent : :func:`~follow.doe.design.latin_hypercube` répartit ``n`` essais aléatoirement
 mais stratifiés sur autant de facteurs qu'on veut.
 
 .. code-block:: python
 
-   from follow.design import latin_hypercube
+   from follow.doe.design import latin_hypercube
 
    lhs_trials = latin_hypercube(
        baseline_recipe, 15, seed=42, id_field="trial_id",
@@ -324,11 +324,11 @@ identifiants comme parents, comme un vrai commit de fusion.
 
 À partir d'un certain point de l'étude, on veut tracer systématiquement qui a lancé le run et
 quel type de plan a été utilisé — sans en faire un champ de la ``Structure``. Un
-:class:`~follow.commit_form.CommitForm` (voir :doc:`commit_form`) rend cela **obligatoire** :
+:class:`~follow.storage.commit_form.CommitForm` (voir :doc:`commit_form`) rend cela **obligatoire** :
 
 .. code-block:: python
 
-   from follow.commit_form import CommitForm
+   from follow.storage.commit_form import CommitForm
 
    commit_form = CommitForm.model_validate({
        "title": "Formulaire de commit - Labo patisserie",
@@ -342,7 +342,7 @@ quel type de plan a été utilisé — sans en faire un champ de la ``Structure`
    repo.commit_form = commit_form   # un attribut simple - a fixer des qu'un formulaire doit devenir obligatoire
 
 À partir de là, tout commit sans ``form_answers`` valides est refusé
-(:class:`~follow.commit_form.FormValidationError`, qui liste tous les problèmes d'un coup).
+(:class:`~follow.storage.commit_form.FormValidationError`, qui liste tous les problèmes d'un coup).
 
 Étape 7 — Valider avant de conclure
 -----------------------------------------
@@ -376,13 +376,13 @@ hybride décrit dans :doc:`batch`.
 Étape 8 — Tout relire
 --------------------------
 
-Chaque expérience se lit avec :func:`~follow.report.experiment_fiche` (résumé → objectifs →
+Chaque expérience se lit avec :func:`~follow.presentation.report.experiment_fiche` (résumé → objectifs →
 split le cas échéant → résultats & preuves → conclusion) :
 
 .. code-block:: python
 
    from follow import experiment_fiche
-   from follow.report import batch_table
+   from follow.presentation.report import batch_table
 
    structure = repo.load_structure(final)
    variation = analyze_batch(structure.trials, ignore=["trial_id"])
@@ -413,7 +413,7 @@ Ou tout le dépôt d'un coup, sans rien écrire à la main (voir :doc:`report`) 
 
    follow derive exp_xxxxxxxx --repo mon_labo --new-branch essai-temperature \
      --title "Split manuel : temperature" --intent "..." --out temp.json
-   # editer temp.json : structure = CakeTrialBatch genere via follow.design.sweep en Python,
+   # editer temp.json : structure = CakeTrialBatch genere via follow.doe.design.sweep en Python,
    # puis coller le JSON resultant (model_dump) dans le champ "structure" du brouillon
    follow commit temp.json --repo mon_labo
 
@@ -430,7 +430,7 @@ Ou tout le dépôt d'un coup, sans rien écrire à la main (voir :doc:`report`) 
    follow graph --repo mon_labo --out graph.html --open
 
 ``follow new``/``derive``/``merge`` n'ont pas de générateur de DOE intégré : la structure d'un
-lot (``CakeTrialBatch`` avec ses ``trials`` déjà générés par ``follow.design`` en Python) se
+lot (``CakeTrialBatch`` avec ses ``trials`` déjà générés par ``follow.doe.design`` en Python) se
 prépare comme n'importe quel ``--structure-file``, puisque le format JSON est le même que
 ``ChocolateCake.model_dump(mode="json")``.
 

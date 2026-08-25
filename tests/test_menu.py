@@ -9,8 +9,8 @@ import pytest
 
 from examples.recipe import CakeRecipe
 from follow import Quantity, Repository
-from follow.commit_form import CommitForm
-from follow.menu import (
+from follow.storage.commit_form import CommitForm
+from follow.interfaces.menu import (
     _action_close_draft,
     _action_derive,
     _action_graph,
@@ -87,7 +87,7 @@ def _cake_json(tmp_path, flour_g=200):
 
 
 def test_require_questionary_raises_a_clean_error_when_not_installed(monkeypatch):
-    monkeypatch.setattr("follow.menu.questionary", None)
+    monkeypatch.setattr("follow.interfaces.menu.questionary", None)
     with pytest.raises(SystemExit, match="questionary"):
         _require_questionary()
 

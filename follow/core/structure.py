@@ -15,7 +15,7 @@ class Structure(BaseModel):
     can hold a list of ``SolarCell``, each holding a ``PNJunction``, and a ``PNJunction`` variant
     can subclass a more generic one to add a few fields. ``Structure`` itself never restricts
     the physics/domain being modelled - genericity comes from walking the fields generically
-    (see :mod:`follow.diffing`), not from a fixed schema. Prefer :class:`follow.quantity.Quantity`
+    (see :mod:`follow.paths.diffing`), not from a fixed schema. Prefer :class:`follow.core.quantity.Quantity`
     for leaf values so units and uncertainty travel with the number and diffs stay meaningful.
 
     Define subclasses at module top level. ``registry_key()`` (used to round-trip ``structure``

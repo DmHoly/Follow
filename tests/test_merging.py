@@ -1,6 +1,6 @@
 import pytest
 
-from follow.merging import get_path, resolve_merge_paths, split_path
+from follow.paths.merging import get_path, resolve_merge_paths, split_path
 
 
 def test_untouched_paths_keep_ours_value():

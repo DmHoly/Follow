@@ -1,7 +1,7 @@
 """Track one physical thing (a mold, a wafer, a sample - anything you gave a name to) across
 several *separate* experiments, without hand-maintained references.
 
-This is a different axis from :mod:`follow.batch`: a batch is N variants inside *one*
+This is a different axis from :mod:`follow.doe.batch`: a batch is N variants inside *one*
 experiment; this is *one* physical entity that shows up across *several* experiments over time
 (a batch experiment creates 25 wafers, then wafer #13 specifically gets its own follow-up
 experiment weeks later - two commits, related by which physical thing they're both about, not
@@ -10,9 +10,9 @@ by git parentage).
 Give any ``Structure`` (or a nested sub-structure, e.g. one entry in a batch's list field) an
 ``entity_id`` field - any string you pick, like ``"moule-vert"`` or ``"wafer-A3"``. Nothing else
 is required: no reference to set, no id to look up and copy. :func:`find_entity_mentions` (and
-:meth:`Repository.find_entity <follow.repository.Repository.find_entity>`, built on it) find
+:meth:`Repository.find_entity <follow.storage.repository.Repository.find_entity>`, built on it) find
 every experiment that used the same name by walking each experiment's already-stored structure
-dump - the same shape-based walk :mod:`follow.diffing`/:mod:`follow.batch` already do, here
+dump - the same shape-based walk :mod:`follow.paths.diffing`/:mod:`follow.doe.batch` already do, here
 searching for one specific leaf instead of comparing several. Two experiments that never
 reference each other, on unrelated branches, still turn up in the same entity's timeline as long
 as they agree on the name.

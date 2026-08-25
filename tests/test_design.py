@@ -2,7 +2,7 @@ import pytest
 
 from examples.wafer_doe import Wafer
 from follow import Quantity
-from follow.design import (
+from follow.doe.design import (
     alias_structure,
     arange,
     check_identifiability,

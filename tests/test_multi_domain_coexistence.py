@@ -14,7 +14,7 @@ from examples.mosfet import Layer, MOSFETStructure
 from examples.recipe import BakeStep, CakeRecipe
 from examples.solar_cell import PNJunction, SolarCell, SolarModule
 from follow import Quantity, Repository, Structure, diff_structures, render_study_html
-from follow.graphing import build_graph_figure
+from follow.presentation.graphing import build_graph_figure
 
 
 def _recipe(flour_g: float) -> CakeRecipe:
