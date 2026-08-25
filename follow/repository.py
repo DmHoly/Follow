@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-import os
 from pathlib import Path
 from typing import Any, Iterable, Iterator
 
@@ -19,6 +17,7 @@ from .errors import (  # noqa: F401
 from .ids import content_id
 from .merging import resolve_merge_paths
 from .models import Conclusion, Evidence, Experiment, Objective, ReferenceLink, Step, steps_by_order, utcnow
+from .storage import JsonFileStore, MemoryStore, ObjectStore
 from .structure import Structure
 
 
@@ -30,33 +29,6 @@ def _step_order_key(entry: Any) -> tuple[int, str]:
     """
     head, _, rest = entry.path.partition(".")
     return (int(head) if head.isdigit() else 0, rest)
-
-
-def _write_atomic(path: Path, text: str) -> None:
-    """Write ``text`` to ``path`` so a reader only ever sees the old file or the new one.
-
-    A plain ``write_text`` truncates the file and then fills it: interrupt it - Ctrl-C, a full
-    disk, a crash - and what is left on disk is a *half* file. For ``refs.json`` that is not an
-    inconvenience but a repository whose branches no longer name real objects, i.e. exactly the
-    state :class:`DanglingRefError` now reports. Writing to a temporary file in the same
-    directory and then ``os.replace``-ing it over the target makes the swap atomic on POSIX and
-    on Windows, so the old file stands until the new one is complete.
-
-    Note what this does *not* solve: two processes committing to the same repository at once
-    still overwrite each other's refs, because each holds a whole in-memory view read before the
-    other's write. Atomicity keeps every individual file readable; it is not a lock.
-    """
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    try:
-        with open(tmp, "w", encoding="utf-8") as handle:
-            handle.write(text)
-            handle.flush()
-            os.fsync(handle.fileno())  # the bytes must be on disk before the name points at them
-        os.replace(tmp, path)
-    except BaseException:
-        tmp.unlink(missing_ok=True)  # never leave a stray .tmp behind, not even on Ctrl-C
-        raise
 
 
 class ExperimentBuilder:
@@ -216,7 +188,10 @@ class Repository:
     committed; branches are mutable pointers to the latest experiment on a line of work.
 
     Pass ``path`` to persist to plain JSON files (one per experiment, plus a refs file), or
-    leave it out for an in-memory repository (handy for tests and notebooks).
+    leave it out for an in-memory repository (handy for tests and notebooks). Pass ``store`` for
+    anything else: a :class:`~follow.storage.ObjectStore` is the whole of what this class knows
+    about persistence, so a different backend replaces one collaborator instead of editing the
+    class that also holds the commit rules.
 
     Pass ``commit_form`` (a path to a YAML template, or an already-loaded
     :class:`~follow.commit_form.CommitForm`) to make answering it mandatory before any commit is
@@ -225,21 +200,26 @@ class Repository:
     existing repository's directory is enough to start requiring it from then on.
     """
 
-    def __init__(self, path: str | Path | None = None, *, commit_form: str | Path | CommitForm | None = None):
+    def __init__(
+        self,
+        path: str | Path | None = None,
+        *,
+        commit_form: str | Path | CommitForm | None = None,
+        store: ObjectStore | None = None,
+    ):
+        if store is not None and path is not None:
+            raise FollowError("pass either path= or store=, not both - a store already knows where it writes")
+        self._store: ObjectStore = store if store is not None else (MemoryStore() if path is None else JsonFileStore(path))
         self.path = Path(path) if path is not None else None
-        self._objects: dict[str, Experiment] = {}
-        self._branches: dict[str, str] = {}
-        self._tags: dict[str, str] = {}
+
         if isinstance(commit_form, CommitForm):
             self.commit_form: CommitForm | None = commit_form
         elif commit_form is not None:
             self.commit_form = load_commit_form(commit_form)
-        elif self.path is not None and (self.path / "commit_form.yml").exists():
-            self.commit_form = load_commit_form(self.path / "commit_form.yml")
         else:
-            self.commit_form = None
-        if self.path is not None and self.path.exists():
-            self._load()
+            self.commit_form = self._store.default_commit_form()
+
+        self._objects, self._branches, self._tags = self._store.load()
 
     # -- reading -----------------------------------------------------------------
 
@@ -598,8 +578,7 @@ class Repository:
                 "to move anyway"
             )
         self._branches[name] = resolved
-        if self.path is not None:
-            self._persist_refs()
+        self._persist_refs()
 
     def tag(self, name: str, at: str, *, force: bool = False) -> None:
         """Point tag ``name`` (an immutable label) at the experiment resolved by ``at``.
@@ -614,8 +593,7 @@ class Repository:
         resolved = self._resolve_ref(at)
         self._ensure_tag_assignment(name, resolved, force=force)
         self._tags[name] = resolved
-        if self.path is not None:
-            self._persist_refs()
+        self._persist_refs()
 
     def _commit(self, builder: ExperimentBuilder) -> Experiment:
         for parent_id in builder.parents:
@@ -702,31 +680,14 @@ class Repository:
         # immutable citable pointer. Repository tags are created explicitly, via repo.tag().
         self._branches[experiment.branch] = experiment.id
 
-        if self.path is not None:
-            self._persist_experiment(experiment)
-            self._persist_refs()
+        self._store.add_experiment(experiment)
+        self._persist_refs()
         return experiment
 
     # -- persistence -----------------------------------------------------------------
-
-    def _persist_experiment(self, experiment: Experiment) -> None:
-        objects_dir = self.path / "objects"
-        objects_dir.mkdir(parents=True, exist_ok=True)
-        _write_atomic(objects_dir / f"{experiment.id}.json", experiment.model_dump_json(indent=2))
+    #
+    # Nothing here decides *how* anything is stored - see follow.storage. What is left is when:
+    # an experiment is written once, on commit; the refs whenever a pointer moves.
 
     def _persist_refs(self) -> None:
-        self.path.mkdir(parents=True, exist_ok=True)
-        refs = {"branches": self._branches, "tags": self._tags}
-        _write_atomic(self.path / "refs.json", json.dumps(refs, indent=2, sort_keys=True))
-
-    def _load(self) -> None:
-        objects_dir = self.path / "objects"
-        if objects_dir.exists():
-            for file in objects_dir.glob("*.json"):
-                exp = Experiment.model_validate_json(file.read_text(encoding="utf-8"))
-                self._objects[exp.id] = exp
-        refs_file = self.path / "refs.json"
-        if refs_file.exists():
-            refs = json.loads(refs_file.read_text(encoding="utf-8"))
-            self._branches = dict(refs.get("branches", {}))
-            self._tags = dict(refs.get("tags", {}))
+        self._store.write_refs(self._branches, self._tags)

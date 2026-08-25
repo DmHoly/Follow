@@ -2,6 +2,7 @@ import pytest
 
 from examples.recipe import BakeStep, CakeRecipe
 from follow import ExperimentNotFoundError, FollowError, Quantity, Repository
+from follow.storage import JsonFileStore, MemoryStore, ObjectStore
 
 
 def _cake(flour_g: float) -> CakeRecipe:
@@ -240,3 +241,71 @@ def test_carry_references_false_still_gets_a_baseline():
     v1 = repo.new(branch="main", structure=_cake(200), title="v1", intent="start").commit()
     b2 = repo.derive(v1.id, title="v2", intent="tweak", carry_references=False)
     assert [r.experiment_id for r in b2.references if r.role == "baseline"] == [v1.id]
+
+
+# -- persistence is a collaborator, not part of the class ---------------------------------------
+
+
+class _RecordingStore(ObjectStore):
+    """A backend written entirely from outside the library - the point of the abstraction."""
+
+    def __init__(self):
+        self.experiments: dict = {}
+        self.branches: dict = {}
+        self.tags: dict = {}
+        self.writes: list = []
+
+    def load(self):
+        return dict(self.experiments), dict(self.branches), dict(self.tags)
+
+    def add_experiment(self, experiment):
+        self.writes.append(("add_experiment", experiment.id))
+        self.experiments[experiment.id] = experiment
+
+    def write_refs(self, branches, tags):
+        self.writes.append(("write_refs", dict(branches)))
+        self.branches, self.tags = dict(branches), dict(tags)
+
+
+def test_a_repository_can_be_given_any_object_store():
+    store = _RecordingStore()
+    repo = Repository(store=store)
+    v1 = repo.new(branch="main", structure=_cake(200), title="v1", intent="x").commit()
+    v2 = repo.derive(v1.id, title="v2", intent="x").commit()
+
+    assert [kind for kind, _ in store.writes] == ["add_experiment", "write_refs"] * 2
+    assert store.branches == {"main": v2.id}
+
+    reopened = Repository(store=store)  # a second repository over the same backend
+    assert len(reopened) == 2
+    assert reopened.get("main").title == "v2"
+
+
+def test_moving_a_ref_reaches_the_store_without_a_commit():
+    store = _RecordingStore()
+    repo = Repository(store=store)
+    v1 = repo.new(branch="main", structure=_cake(200), title="v1", intent="x").commit()
+    store.writes.clear()
+
+    repo.tag("release", v1.id)
+    assert store.writes == [("write_refs", {"main": v1.id})]
+    assert store.tags == {"release": v1.id}
+
+
+def test_an_in_memory_repository_uses_the_memory_store():
+    # not a stand-in for the real thing: it is the backend Repository() genuinely runs on
+    assert isinstance(Repository()._store, MemoryStore)
+    assert isinstance(Repository(store=None)._store, MemoryStore)
+
+
+def test_a_path_selects_the_json_backend(tmp_path):
+    repo = Repository(tmp_path)
+    assert isinstance(repo._store, JsonFileStore)
+    repo.new(branch="main", structure=_cake(200), title="v1", intent="x").commit()
+    assert (tmp_path / "refs.json").exists()
+    assert list((tmp_path / "objects").glob("*.json"))
+
+
+def test_passing_both_a_path_and_a_store_is_refused():
+    with pytest.raises(FollowError, match="not both"):
+        Repository("/tmp/somewhere", store=_RecordingStore())

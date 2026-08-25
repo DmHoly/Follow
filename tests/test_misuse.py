@@ -418,7 +418,7 @@ def test_an_interrupted_write_leaves_the_previous_refs_file_intact(tmp_path, mon
     # Regression: refs.json was written with a plain write_text, which truncates first and fills
     # second - an interruption in between left a half file, i.e. a repository whose branches no
     # longer name real objects.
-    import follow.repository as repository_module
+    import follow.storage as storage_module  # where the atomic write now lives
 
     repo = Repository(tmp_path)
     repo.new(branch="main", structure=_cake(), title="v1", intent="x").commit()
@@ -427,7 +427,7 @@ def test_an_interrupted_write_leaves_the_previous_refs_file_intact(tmp_path, mon
     def interrupted(_src, _dst):
         raise KeyboardInterrupt("power cut")
 
-    monkeypatch.setattr(repository_module.os, "replace", interrupted)
+    monkeypatch.setattr(storage_module.os, "replace", interrupted)
     with pytest.raises(KeyboardInterrupt):
         repo.new(branch="side", structure=_cake(220), title="v2", intent="x").commit()
     monkeypatch.undo()
