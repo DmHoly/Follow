@@ -173,3 +173,65 @@ def test_fractional_factorial_requires_at_least_one_base_factor():
             factors={"implant_dose": (2, 10, "1e14 cm^-2")},
             generators={"implant_dose": []},
         )
+
+
+# -- misuse: a factor name that isn't a field --------------------------------------------------
+# Regression: model_copy(update=) writes whatever it is handed without validating, bypassing
+# Structure's extra="forbid". A typo'd factor name used to yield N identical variants - a design
+# varying nothing at all - and check_identifiability then reported that empty design as clean.
+
+
+def test_sweep_rejects_a_field_the_reference_does_not_have():
+    with pytest.raises(ValueError, match="implant_does"):
+        sweep(_reference(), "implant_does", lin(2, 10, 3, unit="1e14 cm^-2"))
+
+
+def test_full_factorial_rejects_an_unknown_factor():
+    with pytest.raises(ValueError, match="typo_factor"):
+        full_factorial(_reference(), typo_factor=lin(2, 10, 3))
+
+
+def test_latin_hypercube_rejects_an_unknown_factor():
+    with pytest.raises(ValueError, match="typo_factor"):
+        latin_hypercube(_reference(), 5, seed=0, typo_factor=(2, 10))
+
+
+def test_fractional_factorial_rejects_a_factor_that_is_not_a_field():
+    with pytest.raises(ValueError, match="typo_factor"):
+        fractional_factorial(
+            _reference(),
+            factors={"implant_dose": (2, 10, "1e14 cm^-2"), "typo_factor": (0, 1)},
+            generators={},
+        )
+
+
+def test_unknown_id_field_is_rejected():
+    with pytest.raises(ValueError, match="id_field"):
+        sweep(_reference(), "implant_dose", lin(2, 10, 3, unit="1e14 cm^-2"), id_field="slott")
+
+
+def test_check_identifiability_rejects_an_unknown_factor_instead_of_reporting_it_clean():
+    variants = sweep(_reference(), "implant_dose", lin(2, 10, 3, unit="1e14 cm^-2"))
+    with pytest.raises(ValueError, match="implant_does"):
+        check_identifiability(variants, ["implant_does"])
+
+
+def test_check_identifiability_on_an_empty_design_is_empty_not_an_error():
+    assert check_identifiability([], ["implant_dose"]) == []
+
+
+def test_a_value_of_the_wrong_type_fails_at_build_time_not_at_reload_time():
+    # a bare float where the field holds a Quantity used to be written straight into the model,
+    # committed, and only rejected much later when the repository was reloaded
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        full_factorial(_reference(), implant_dose=[2.0, 4.0])
+
+
+def test_generated_variants_are_still_valid_instances_of_the_reference_class():
+    variants = sweep(_reference(), "implant_dose", lin(2, 10, 3, unit="1e14 cm^-2"), id_field="slot")
+    assert all(isinstance(v, Wafer) for v in variants)
+    assert [v.implant_dose.value for v in variants] == [2.0, 6.0, 10.0]
+    assert [v.slot for v in variants] == [1, 2, 3]
+    assert all(v.anneal_duration == _reference().anneal_duration for v in variants)

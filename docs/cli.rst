@@ -82,7 +82,8 @@ fusionner dedans). Voir :doc:`merging` pour la sémantique complète.
    * - ``--take-structure PATH``
      - Répétable — chemin de structure à prendre de ``ref_b``.
    * - ``--take-steps PATH``
-     - Répétable — chemin d'étape à prendre de ``ref_b``.
+     - Répétable — chemin d'étape à prendre de ``ref_b``, désigné par le ``order`` de l'étape
+       (``"3"``, ``"3.parameters.temperature"``) et non par sa position.
    * - ``--author`` / ``--hypothesis`` / ``--out``
      - Comme ``new``.
 
@@ -90,7 +91,10 @@ fusionner dedans). Voir :doc:`merging` pour la sémantique complète.
 -------------------------------------
 
 Fige un brouillon (produit par ``new``/``derive``/``merge``, ou édité à la main) dans le dépôt.
-Calcule l'id par contenu, avance la branche, applique les tags.
+Calcule l'id par contenu et avance la branche. Le champ ``tags`` du brouillon est une simple
+étiquette descriptive stockée sur l'expérience : il ne crée aucun tag de dépôt (plusieurs
+expériences peuvent porter la même étiquette). Pour un pointeur citable et immuable, utilisez
+``follow tag``.
 
 ``follow log [ref]``
 -----------------------
@@ -126,6 +130,11 @@ dans chaque structure.
 --------------------------------------------------
 
 Sans argument : liste les branches/tags. Avec un nom : crée ou déplace, ``--at REF`` requis.
+
+Créer une branche, ou l'avancer vers un descendant de sa pointe actuelle (*fast-forward*), est
+toujours accepté. La déplacer vers un commit dont sa pointe **ne descend pas** abandonnerait cet
+historique — toujours stocké, mais plus joignable par aucune branche — et est refusé, comme
+``follow commit`` refuse le même scénario. ``--force`` est l'échappatoire explicite.
 
 Branches et tags partagent un seul espace de noms : créer une branche du même nom qu'un tag
 existant (ou l'inverse) est refusé plutôt que de silencieusement rendre l'un des deux

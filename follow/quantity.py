@@ -4,6 +4,8 @@ from typing import Union
 
 from pydantic import BaseModel, ConfigDict
 
+from .formatting import format_value
+
 ScalarValue = Union[float, int, str, bool]
 
 
@@ -22,9 +24,13 @@ class Quantity(BaseModel):
     note: str | None = None
 
     def __str__(self) -> str:
-        parts = [str(self.value)]
-        if self.unit:
-            parts.append(self.unit)
-        if self.uncertainty is not None:
-            parts.append(f"± {self.uncertainty}")
-        return " ".join(parts)
+        """The same rendering :func:`~follow.formatting.format_value` gives the dumped form.
+
+        These were two separate implementations that had already drifted: this one dropped
+        ``note`` entirely, so a fiche showed the note on values reached through the structure
+        (formatted from the dump) and silently lost it on step parameters and evidence metrics
+        (formatted through ``str``). One renderer, one output.
+        """
+        return format_value(
+            {"value": self.value, "unit": self.unit, "uncertainty": self.uncertainty, "note": self.note}
+        )

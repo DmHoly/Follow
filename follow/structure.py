@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict
 
+from .errors import StructureTypeError
+
 _REGISTRY: dict[str, type["Structure"]] = {}
 
 
@@ -43,7 +45,7 @@ class Structure(BaseModel):
         try:
             return _REGISTRY[key]
         except KeyError as exc:
-            raise KeyError(
+            raise StructureTypeError(
                 f"Unknown structure type {key!r}. Make sure the module defining it "
                 "has been imported before loading experiments that use it."
             ) from exc

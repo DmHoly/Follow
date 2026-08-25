@@ -1,43 +1,34 @@
 from __future__ import annotations
 
-import json
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Iterator
 
 from .commit_form import CommitForm, load_commit_form
 from .diffing import StructureDiff, diff_structures
 from .entities import find_entity_mentions
+# re-exported here so `from follow.repository import FollowError` keeps working
+from .errors import (  # noqa: F401
+    DanglingRefError,
+    ExperimentNotFoundError,
+    FollowError,
+    MergeError,
+    NothingToCommitError,
+)
 from .ids import content_id
 from .merging import resolve_merge_paths
-from .models import Conclusion, Evidence, Experiment, Objective, ReferenceLink, Step
+from .models import Conclusion, Evidence, Experiment, Objective, ReferenceLink, Step, steps_by_order, utcnow
+from .storage import JsonFileStore, MemoryStore, ObjectStore
 from .structure import Structure
 
 
-def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+def _step_order_key(entry: Any) -> tuple[int, str]:
+    """Sort step-diff entries by step number, not by the string form of the path.
 
-
-class FollowError(Exception):
-    """Base class for Follow errors."""
-
-
-class ExperimentNotFoundError(FollowError, KeyError):
-    def __init__(self, ref: str):
-        super().__init__(f"No experiment, branch or tag matches {ref!r}")
-        self.ref = ref
-
-
-class NothingToCommitError(FollowError):
-    """Raised when a commit's content is identical to its target branch's current tip - the
-    same rule as `git commit` refusing with "nothing to commit, working tree clean": Follow
-    never creates a new commit that says nothing a prior one didn't already say.
+    The paths are keyed by ``order`` as a string, so plain sorting would read 1, 10, 11, 2 - the
+    diff of a ten-step protocol would be listed out of protocol order.
     """
-
-    def __init__(self, branch: str, tip_id: str):
-        super().__init__(f"nothing to commit: {branch!r} already points at {tip_id}, and this commit's content is identical")
-        self.branch = branch
-        self.tip_id = tip_id
+    head, _, rest = entry.path.partition(".")
+    return (int(head) if head.isdigit() else 0, rest)
 
 
 class ExperimentBuilder:
@@ -93,7 +84,14 @@ class ExperimentBuilder:
         return self
 
     def add_step(self, **kwargs: Any) -> "ExperimentBuilder":
-        kwargs.setdefault("order", len(self.steps) + 1)
+        """Append a protocol step, numbering it after the highest ``order`` already present.
+
+        Counting the steps instead (``len(self.steps) + 1``) collided the moment any order was
+        set by hand or inherited non-contiguously: ``add_step(order=2)`` followed by a plain
+        ``add_step()`` produced two steps both claiming order 2, and nothing said so until
+        :meth:`commit` ran the validator, far from the call that caused it.
+        """
+        kwargs.setdefault("order", max((s.order for s in self.steps), default=0) + 1)
         self.steps.append(Step(**kwargs))
         return self
 
@@ -112,7 +110,7 @@ class ExperimentBuilder:
 
     def conclude(self, **kwargs: Any) -> "ExperimentBuilder":
         kwargs.setdefault("status", "concluded")
-        kwargs.setdefault("decided_at", _utcnow())
+        kwargs.setdefault("decided_at", utcnow())
         self.conclusion = Conclusion(**kwargs)
         return self
 
@@ -190,7 +188,10 @@ class Repository:
     committed; branches are mutable pointers to the latest experiment on a line of work.
 
     Pass ``path`` to persist to plain JSON files (one per experiment, plus a refs file), or
-    leave it out for an in-memory repository (handy for tests and notebooks).
+    leave it out for an in-memory repository (handy for tests and notebooks). Pass ``store`` for
+    anything else: a :class:`~follow.storage.ObjectStore` is the whole of what this class knows
+    about persistence, so a different backend replaces one collaborator instead of editing the
+    class that also holds the commit rules.
 
     Pass ``commit_form`` (a path to a YAML template, or an already-loaded
     :class:`~follow.commit_form.CommitForm`) to make answering it mandatory before any commit is
@@ -199,21 +200,26 @@ class Repository:
     existing repository's directory is enough to start requiring it from then on.
     """
 
-    def __init__(self, path: str | Path | None = None, *, commit_form: str | Path | CommitForm | None = None):
+    def __init__(
+        self,
+        path: str | Path | None = None,
+        *,
+        commit_form: str | Path | CommitForm | None = None,
+        store: ObjectStore | None = None,
+    ):
+        if store is not None and path is not None:
+            raise FollowError("pass either path= or store=, not both - a store already knows where it writes")
+        self._store: ObjectStore = store if store is not None else (MemoryStore() if path is None else JsonFileStore(path))
         self.path = Path(path) if path is not None else None
-        self._objects: dict[str, Experiment] = {}
-        self._branches: dict[str, str] = {}
-        self._tags: dict[str, str] = {}
+
         if isinstance(commit_form, CommitForm):
             self.commit_form: CommitForm | None = commit_form
         elif commit_form is not None:
             self.commit_form = load_commit_form(commit_form)
-        elif self.path is not None and (self.path / "commit_form.yml").exists():
-            self.commit_form = load_commit_form(self.path / "commit_form.yml")
         else:
-            self.commit_form = None
-        if self.path is not None and self.path.exists():
-            self._load()
+            self.commit_form = self._store.default_commit_form()
+
+        self._objects, self._branches, self._tags = self._store.load()
 
     # -- reading -----------------------------------------------------------------
 
@@ -239,13 +245,29 @@ class Repository:
         return True
 
     def _resolve_ref(self, ref: str) -> str:
-        if ref in self._branches:
-            return self._branches[ref]
-        if ref in self._tags:
-            return self._tags[ref]
+        """Resolve a branch name, tag name or experiment id to an id that is actually stored.
+
+        A ref is only resolved once its target has been confirmed present: returning the id a
+        stale ``refs.json`` names, without checking, left ``get()`` to fail on a bare
+        ``KeyError`` carrying nothing but a hash - and made ``ref in repo`` answer True for a
+        ref that ``get()`` could not honour.
+        """
+        for kind, table in (("branch", self._branches), ("tag", self._tags)):
+            if ref in table:
+                target = table[ref]
+                if target not in self._objects:
+                    raise DanglingRefError(kind, ref, target)
+                return target
         if ref in self._objects:
             return ref
         raise ExperimentNotFoundError(ref)
+
+    def _stored(self, experiment_id: str, *, reached_from: str) -> Experiment:
+        """One stored experiment by id, or a clear error naming what pointed at it."""
+        try:
+            return self._objects[experiment_id]
+        except KeyError:
+            raise DanglingRefError("parent of", reached_from, experiment_id) from None
 
     def _ensure_branch_name_available(self, name: str) -> None:
         """Branches and tags share one namespace: resolving a ref checks branches first, so a
@@ -279,10 +301,12 @@ class Repository:
         history: list[Experiment] = []
         current: str | None = self._resolve_ref(ref)
         seen: set[str] = set()
+        previous = ref
         while current and current not in seen:
             seen.add(current)
-            exp = self._objects[current]
+            exp = self._stored(current, reached_from=previous)
             history.append(exp)
+            previous = exp.id
             current = exp.parents[0] if exp.parents else None
         return history
 
@@ -297,14 +321,18 @@ class Repository:
 
     def diff_steps(self, ref_a: str, ref_b: str) -> StructureDiff:
         """Diff between two experiments' protocol (``steps``), the same way :meth:`diff`
-        compares their structure - use it to find the ``[i]``/``[i].field`` paths to pass to
-        :meth:`merge`'s ``take_steps``.
+        compares their structure - use it to find the ``<order>``/``<order>.field`` paths to pass
+        to :meth:`merge`'s ``take_steps``.
+
+        Steps are matched on their :attr:`~follow.models.Step.order`, not on their position (see
+        :func:`~follow.models.steps_by_order`), so inserting a step at the top of one protocol
+        reports one added step rather than claiming every later step changed. A path therefore
+        reads ``3.parameters.temperature``: the step *numbered* 3, the one the fiche shows as
+        "3.", whichever slot it occupies in the list.
         """
         a, b = self.get(ref_a), self.get(ref_b)
-        return diff_structures(
-            [s.model_dump(mode="json") for s in a.steps],
-            [s.model_dump(mode="json") for s in b.steps],
-        )
+        diff = diff_structures(steps_by_order(a.steps), steps_by_order(b.steps))
+        return StructureDiff(entries=sorted(diff.entries, key=_step_order_key))
 
     def find_entity(self, entity_id: str) -> list[Experiment]:
         """Every experiment in this repository that mentions the physical entity
@@ -340,6 +368,10 @@ class Repository:
     ) -> ExperimentBuilder:
         """Start an experiment on ``branch``. If the branch already has a tip, it becomes the
         parent automatically (continuing that line of work), unless ``parents`` is given.
+
+        ``tags`` are free-form descriptive labels stored on the experiment; they do not create
+        repository tags, so the same label may be reused on as many experiments as you like. Use
+        :meth:`tag` for a citable, immutable pointer to one specific experiment.
         """
         parent_ids = parents if parents is not None else ([self._branches[branch]] if branch in self._branches else [])
         return ExperimentBuilder(
@@ -375,10 +407,21 @@ class Repository:
 
         The parent's structure, objectives, protocol steps and references are carried over as a
         starting point (override any of them before committing), and a "baseline" reference back
-        to the parent is added automatically unless one is already present - that's what makes
-        every derived experiment comparable to what it came from without extra bookkeeping.
+        to the parent is always added - that's what makes every derived experiment comparable to
+        what it came from without extra bookkeeping.
+
+        The parent's own lineage references (``baseline``, and ``merge_source`` when deriving from
+        a merge commit) are deliberately *not* carried over: they describe where the *parent* came
+        from, not this experiment, and keeping them would leave the new commit pointing its
+        baseline at its grandparent - so :meth:`ExperimentBuilder.diff_from_baseline` and every
+        "what changed versus the reference" view would silently compare against the wrong
+        ancestor. Every other reference (a ``target_spec``, a ``prior_art`` citation...) is carried
+        over as before, the same way :meth:`merge` does it.
         """
         parent = self.get(ref)
+        carried_references = (
+            [r for r in parent.references if r.role not in ("baseline", "merge_source")] if carry_references else ()
+        )
         builder = ExperimentBuilder(
             self,
             branch=new_branch or parent.branch,
@@ -389,11 +432,10 @@ class Repository:
             author=author,
             hypothesis=hypothesis,
             objectives=parent.objectives if carry_objectives else (),
-            references=parent.references if carry_references else (),
+            references=carried_references,
             steps=parent.steps if carry_steps else (),
         )
-        if not any(r.role == "baseline" for r in builder.references):
-            builder.add_reference(role="baseline", experiment_id=parent.id, label=f"parent: {parent.title}")
+        builder.add_reference(role="baseline", experiment_id=parent.id, label=f"parent: {parent.title}")
         return builder
 
     def merge(
@@ -412,7 +454,10 @@ class Repository:
         """Merge two lines of work into one experiment - the equivalent of `git merge`, with
         manual conflict resolution: ``take_structure``/``take_steps`` list the paths (in the
         format :meth:`diff`/:meth:`diff_steps` report) whose value should come from ``ref_b``
-        instead of ``ref_a``; every path you don't list keeps ``ref_a``'s value. The result gets
+        instead of ``ref_a``; every path you don't list keeps ``ref_a``'s value. A ``take_steps``
+        path names a step by its :attr:`~follow.models.Step.order` - ``"3"`` for the whole step
+        numbered 3, ``"3.parameters.temperature"`` for one of its parameters - not by its slot in
+        the list, so it keeps meaning the same step when the two protocols differ in length. The result gets
         both tips as parents (so the graph records the merge like git does), carries over
         ``ref_a``'s other references (a ``target_spec`` pointer, say - the same "carry what came
         before" behaviour as :meth:`derive`), and adds a reference back to each side (``baseline``
@@ -424,9 +469,9 @@ class Repository:
         """
         a, b = self.get(ref_a), self.get(ref_b)
         if a.id == b.id:
-            raise ValueError(f"{ref_a!r} and {ref_b!r} both resolve to {a.id} - nothing to merge")
+            raise MergeError(f"{ref_a!r} and {ref_b!r} both resolve to {a.id} - nothing to merge")
         if a.structure_type != b.structure_type:
-            raise ValueError(
+            raise MergeError(
                 f"cannot merge {ref_a!r} ({a.structure_type}) with {ref_b!r} ({b.structure_type}): "
                 "different structure types - Follow does not reconcile different domain schemas"
             )
@@ -437,11 +482,7 @@ class Repository:
             self.load_structure(b).model_dump(mode="json"),
             take_structure,
         )
-        merged_steps = resolve_merge_paths(
-            [s.model_dump(mode="json") for s in a.steps],
-            [s.model_dump(mode="json") for s in b.steps],
-            take_steps,
-        )
+        merged_steps = resolve_merge_paths(steps_by_order(a.steps), steps_by_order(b.steps), take_steps)
 
         carried_references = [r for r in a.references if r.role not in ("baseline", "merge_source")]
 
@@ -456,7 +497,7 @@ class Repository:
             hypothesis=hypothesis,
             objectives=a.objectives,
             references=carried_references,
-            steps=[Step.model_validate(s) for s in merged_steps],
+            steps=[Step.model_validate(s) for s in sorted(merged_steps.values(), key=lambda step: step["order"])],
         )
         builder.add_reference(role="baseline", experiment_id=a.id, label=f"{a.branch}: {a.title}")
         builder.add_reference(role="merge_source", experiment_id=b.id, label=f"{b.branch}: {b.title}")
@@ -489,16 +530,61 @@ class Repository:
             builder.conclusion = Conclusion.model_validate(payload["conclusion"])
         return builder
 
-    def branch(self, name: str, at: str) -> None:
-        """Point branch ``name`` at the experiment resolved by ``at`` (id, branch, or tag)."""
+    def _descends_from(self, ancestor_id: str, descendant_id: str) -> bool:
+        """Is ``descendant_id`` ``ancestor_id`` itself, or one of its descendants?
+
+        Walks *every* parent line, not just the first the way :meth:`log` does: a commit reached
+        only through the second parent of a merge is still genuinely part of that history, and
+        treating it as unrelated would refuse a move that loses nothing.
+        """
+        seen: set[str] = set()
+        stack = [descendant_id]
+        while stack:
+            node = stack.pop()
+            if node == ancestor_id:
+                return True
+            if node in seen:
+                continue
+            seen.add(node)
+            experiment = self._objects.get(node)
+            if experiment is not None:
+                stack.extend(experiment.parents)
+        return False
+
+    def branch(self, name: str, at: str, *, force: bool = False) -> None:
+        """Point branch ``name`` at the experiment resolved by ``at`` (id, branch, or tag).
+
+        Creating a branch, or moving one forward onto a descendant of its current tip (git's
+        fast-forward), is always allowed - nothing becomes unreachable. Moving one *sideways or
+        backwards*, onto a commit its current tip does not descend from, would leave that tip
+        stranded: still stored, but no longer reachable from any branch via :meth:`log`. That is
+        the very thing :meth:`_commit` refuses to do, so it is refused here too, and needs the
+        same kind of deliberate opt-in :meth:`tag` asks for: ``force=True``.
+        """
         resolved = self._resolve_ref(at)
         self._ensure_branch_name_available(name)
+        current_tip_id = self._branches.get(name)
+        if (
+            current_tip_id is not None
+            and current_tip_id != resolved
+            and not force
+            and not self._descends_from(current_tip_id, resolved)
+        ):
+            raise FollowError(
+                f"branch {name!r} points at {current_tip_id}, which {resolved} does not descend "
+                f"from - moving it there would abandon that history (it would stay in the "
+                f"repository but no longer be reachable from any branch); tag {current_tip_id!r} "
+                "or point another branch at it first if you want to keep it, or pass force=True "
+                "to move anyway"
+            )
         self._branches[name] = resolved
-        if self.path is not None:
-            self._persist_refs()
+        self._persist_refs()
 
     def tag(self, name: str, at: str, *, force: bool = False) -> None:
         """Point tag ``name`` (an immutable label) at the experiment resolved by ``at``.
+
+        This is the only way a repository tag is created - an experiment's own ``tags`` field is
+        just descriptive metadata and never becomes a ref (several experiments can share a label).
 
         Raises if ``name`` already tags a *different* experiment - tags are meant to be a
         stable, citable reference, so silently repointing one defeats the point. Pass
@@ -507,8 +593,7 @@ class Repository:
         resolved = self._resolve_ref(at)
         self._ensure_tag_assignment(name, resolved, force=force)
         self._tags[name] = resolved
-        if self.path is not None:
-            self._persist_refs()
+        self._persist_refs()
 
     def _commit(self, builder: ExperimentBuilder) -> Experiment:
         for parent_id in builder.parents:
@@ -549,7 +634,7 @@ class Repository:
         )
         current_tip_id = self._branches.get(builder.branch)
         if current_tip_id is not None:
-            current_tip = self._objects[current_tip_id]
+            current_tip = self._stored(current_tip_id, reached_from=builder.branch)
             # Ignoring id/created_at, is this commit identical to the branch's current tip? Then
             # there is nothing to commit - exactly like `git commit` with no staged changes,
             # this is refused rather than silently creating a content-duplicate commit (which
@@ -571,42 +656,38 @@ class Repository:
                     "commit to a new/different branch name instead"
                 )
 
-        payload = provisional.model_dump(mode="json", exclude={"id"})
+        # The id is derived from what the experiment *says*, not from when it was written:
+        # created_at is excluded, exactly like the NothingToCommitError comparison above already
+        # does. Hashing it in made every id depend on the clock, so the same content committed
+        # twice produced two unrelated ids - which is the opposite of what content addressing is
+        # for, and quietly falsified content_id's promise that identical payloads dedupe.
+        payload = provisional.model_dump(mode="json", exclude={"id", "created_at"})
         experiment = provisional.model_copy(update={"id": content_id("experiment", payload)})
 
-        for tag in experiment.tags:
-            self._ensure_tag_assignment(tag, experiment.id, force=False)
+        # Content addressing means an id already in the store denotes this exact content, so the
+        # commit that is already there wins - re-storing would only overwrite its created_at,
+        # rewriting an object the repository promises is immutable. This is git's dedupe rule.
+        stored = self._objects.get(experiment.id)
+        if stored is not None:
+            experiment = stored
+        else:
+            self._objects[experiment.id] = experiment
 
-        self._objects[experiment.id] = experiment
+        # Experiment.tags are free-form descriptive labels, like `metadata` - deliberately NOT
+        # repository tags. Promoting them to refs made a second experiment reusing an ordinary
+        # label ("important", "à refaire") fail its commit outright, with a message about
+        # repo.tag() the user had never called: one field cannot be both a throwaway label and an
+        # immutable citable pointer. Repository tags are created explicitly, via repo.tag().
         self._branches[experiment.branch] = experiment.id
-        for tag in experiment.tags:
-            self._tags[tag] = experiment.id
 
-        if self.path is not None:
-            self._persist_experiment(experiment)
-            self._persist_refs()
+        self._store.add_experiment(experiment)
+        self._persist_refs()
         return experiment
 
     # -- persistence -----------------------------------------------------------------
-
-    def _persist_experiment(self, experiment: Experiment) -> None:
-        objects_dir = self.path / "objects"
-        objects_dir.mkdir(parents=True, exist_ok=True)
-        (objects_dir / f"{experiment.id}.json").write_text(experiment.model_dump_json(indent=2))
+    #
+    # Nothing here decides *how* anything is stored - see follow.storage. What is left is when:
+    # an experiment is written once, on commit; the refs whenever a pointer moves.
 
     def _persist_refs(self) -> None:
-        self.path.mkdir(parents=True, exist_ok=True)
-        refs = {"branches": self._branches, "tags": self._tags}
-        (self.path / "refs.json").write_text(json.dumps(refs, indent=2, sort_keys=True))
-
-    def _load(self) -> None:
-        objects_dir = self.path / "objects"
-        if objects_dir.exists():
-            for file in objects_dir.glob("*.json"):
-                exp = Experiment.model_validate_json(file.read_text())
-                self._objects[exp.id] = exp
-        refs_file = self.path / "refs.json"
-        if refs_file.exists():
-            refs = json.loads(refs_file.read_text())
-            self._branches = dict(refs.get("branches", {}))
-            self._tags = dict(refs.get("tags", {}))
+        self._store.write_refs(self._branches, self._tags)

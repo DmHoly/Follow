@@ -4,12 +4,28 @@ state or crashing with a confusing low-level error. Every one of these was repro
 silent problem before the corresponding fix.
 """
 
+import json
+
 import pytest
 from pydantic import ValidationError
 
 from examples.mosfet import Layer, MOSFETStructure
 from examples.recipe import BakeStep, CakeRecipe
-from follow import ExperimentNotFoundError, FollowError, NothingToCommitError, Quantity, ReferenceLink, Repository
+from follow import (
+    BatchShapeError,
+    DanglingRefError,
+    ExperimentNotFoundError,
+    FollowError,
+    NothingToCommitError,
+    PathNotFoundError,
+    Quantity,
+    ReferenceLink,
+    Repository,
+    Structure,
+    analyze_batch,
+    format_value,
+)
+from follow.commit_form import CommitForm
 from follow.merging import split_path
 
 
@@ -264,3 +280,384 @@ def test_reference_to_a_real_experiment_is_fine():
     builder.add_reference(role="benchmark", label="v1 for comparison", experiment_id=v1.id)
     committed = builder.commit()
     assert committed.references[0].experiment_id == v1.id
+
+
+def test_moving_a_branch_backwards_is_rejected_like_committing_over_its_tip():
+    # Regression: _commit refuses at length to move a branch onto a commit that would strand its
+    # tip, and tag() demands force= to repoint - but branch() wrote the pointer with no guard at
+    # all, so the same history could be abandoned through the neighbouring public method.
+    repo = Repository()
+    a1 = repo.new(branch="main", structure=_cake(), title="v1", intent="x").commit()
+    a2 = repo.derive(a1.id, title="v2", intent="x").commit()
+
+    with pytest.raises(FollowError, match="abandon"):
+        repo.branch("main", a1.id)
+
+    assert repo.branches["main"] == a2.id
+    assert [e.id for e in repo.log("main")] == [a2.id, a1.id]
+
+
+def test_moving_a_branch_sideways_onto_an_unrelated_line_is_rejected():
+    repo = Repository()
+    a1 = repo.new(branch="main", structure=_cake(), title="main-v1", intent="x").commit()
+    other = repo.new(branch="other", structure=_cake(220), title="other-v1", intent="x").commit()
+
+    with pytest.raises(FollowError, match="abandon"):
+        repo.branch("main", other.id)
+    assert repo.branches["main"] == a1.id
+
+
+def test_creating_a_branch_and_fast_forwarding_it_need_no_force():
+    repo = Repository()
+    a1 = repo.new(branch="main", structure=_cake(), title="v1", intent="x").commit()
+    a2 = repo.derive(a1.id, title="v2", intent="x").commit()
+
+    repo.branch("stable", a1.id)  # brand-new name: nothing to abandon
+    assert repo.branches["stable"] == a1.id
+
+    repo.branch("stable", a2.id)  # forward onto a descendant: nothing becomes unreachable
+    assert repo.branches["stable"] == a2.id
+
+    repo.branch("stable", a2.id)  # a no-op move is fine too
+    assert repo.branches["stable"] == a2.id
+
+
+def test_fast_forward_is_recognised_through_the_second_parent_of_a_merge():
+    # a merge commit descends from BOTH its parents; reaching the tip only through the second
+    # one is still real history, so moving the branch there loses nothing and must be allowed
+    repo = Repository()
+    a1 = repo.new(branch="main", structure=_cake(), title="v1", intent="x").commit()
+    side_builder = repo.derive(a1.id, new_branch="side", title="side", intent="x")
+    side_builder.structure.ingredients["flour"] = Quantity(value=300, unit="g")
+    side_tip = side_builder.commit()
+    merged = repo.merge("main", side_tip.id, title="merge", intent="x").commit()
+
+    repo.branch("side", merged.id)
+    assert repo.branches["side"] == merged.id
+
+
+def test_force_is_the_deliberate_escape_hatch_for_moving_a_branch():
+    repo = Repository()
+    a1 = repo.new(branch="main", structure=_cake(), title="v1", intent="x").commit()
+    a2 = repo.derive(a1.id, title="v2", intent="x").commit()
+
+    repo.branch("main", a1.id, force=True)
+    assert repo.branches["main"] == a1.id
+    assert a2.id in repo  # still stored, just no longer on the branch
+
+
+# -- a repository whose refs no longer match its objects ---------------------------------------
+
+
+def _repo_with_a_deleted_object(tmp_path):
+    """A persisted repository whose object files were removed behind its back - the state an
+    interrupted write, a partial copy or a stray `rm` leaves behind."""
+    repo = Repository(tmp_path)
+    committed = repo.new(branch="main", structure=_cake(), title="v1", intent="x").commit()
+    for object_file in (tmp_path / "objects").glob("*.json"):
+        object_file.unlink()
+    return Repository(tmp_path), committed.id
+
+
+def test_a_branch_pointing_at_a_missing_object_raises_a_named_error_not_a_bare_keyerror(tmp_path):
+    # Regression: _resolve_ref returned whatever id refs.json named without checking it was
+    # stored, so get() failed on a bare KeyError carrying nothing but a hash.
+    repo, missing_id = _repo_with_a_deleted_object(tmp_path)
+
+    with pytest.raises(DanglingRefError) as excinfo:
+        repo.get("main")
+    message = str(excinfo.value)
+    assert "main" in message and missing_id in message
+    assert "refs are out of step" in message
+
+
+def test_contains_agrees_with_get_on_a_dangling_ref(tmp_path):
+    # `"main" in repo` used to answer True for a ref get() could not honour
+    repo, _ = _repo_with_a_deleted_object(tmp_path)
+    assert "main" not in repo
+
+
+def test_a_dangling_ref_is_still_an_experiment_not_found_error(tmp_path):
+    # callers already guarding for "this ref doesn't resolve" must keep working
+    repo, _ = _repo_with_a_deleted_object(tmp_path)
+    with pytest.raises(ExperimentNotFoundError):
+        repo.get("main")
+
+
+def test_an_unknown_name_stays_distinct_from_a_broken_one(tmp_path):
+    # the two call for completely different fixes, so they must not report the same thing
+    repo, _ = _repo_with_a_deleted_object(tmp_path)
+    with pytest.raises(ExperimentNotFoundError) as excinfo:
+        repo.get("never-existed")
+    assert not isinstance(excinfo.value, DanglingRefError)
+    assert "No experiment, branch or tag matches" in str(excinfo.value)
+
+
+def test_log_reports_a_missing_parent_instead_of_a_bare_keyerror(tmp_path):
+    repo = Repository(tmp_path)
+    v1 = repo.new(branch="main", structure=_cake(), title="v1", intent="x").commit()
+    repo.derive(v1.id, title="v2", intent="x").commit()
+    (tmp_path / "objects" / f"{v1.id}.json").unlink()  # the root goes missing, the tip stays
+
+    reloaded = Repository(tmp_path)
+    with pytest.raises(DanglingRefError, match=v1.id):
+        reloaded.log("main")
+
+
+def test_committing_onto_a_branch_whose_tip_went_missing_is_reported_clearly(tmp_path):
+    repo, missing_id = _repo_with_a_deleted_object(tmp_path)
+    builder = repo.new(branch="main", structure=_cake(220), title="v2", intent="x", parents=[])
+    with pytest.raises(DanglingRefError, match=missing_id):
+        builder.commit()
+
+
+# -- durability of the repository's own writes -------------------------------------------------
+
+
+def test_an_interrupted_write_leaves_the_previous_refs_file_intact(tmp_path, monkeypatch):
+    # Regression: refs.json was written with a plain write_text, which truncates first and fills
+    # second - an interruption in between left a half file, i.e. a repository whose branches no
+    # longer name real objects.
+    import follow.storage as storage_module  # where the atomic write now lives
+
+    repo = Repository(tmp_path)
+    repo.new(branch="main", structure=_cake(), title="v1", intent="x").commit()
+    before = (tmp_path / "refs.json").read_text(encoding="utf-8")
+
+    def interrupted(_src, _dst):
+        raise KeyboardInterrupt("power cut")
+
+    monkeypatch.setattr(storage_module.os, "replace", interrupted)
+    with pytest.raises(KeyboardInterrupt):
+        repo.new(branch="side", structure=_cake(220), title="v2", intent="x").commit()
+    monkeypatch.undo()
+
+    assert (tmp_path / "refs.json").read_text(encoding="utf-8") == before
+    assert json.loads(before)["branches"]["main"]  # still parseable, still meaningful
+    assert not list(tmp_path.rglob(".*.tmp"))  # no stray temporary left behind
+    assert len(Repository(tmp_path)) == 1  # and the repository still reloads
+
+
+def test_accented_text_round_trips_through_the_stored_files(tmp_path):
+    # the draft writer uses ensure_ascii=False, so the encoding has to be pinned rather than
+    # left to the platform default
+    repo = Repository(tmp_path)
+    committed = repo.new(
+        branch="main", structure=_cake(), title="Cuisson à 180 °C", intent="Réduire l'écart"
+    ).commit()
+
+    raw = (tmp_path / "objects" / f"{committed.id}.json").read_text(encoding="utf-8")
+    assert "180 °C" in raw
+    assert Repository(tmp_path).get("main").title == "Cuisson à 180 °C"
+
+
+def test_a_write_torn_in_half_never_reaches_the_real_refs_file(tmp_path, monkeypatch):
+    # The failure the atomic write actually exists for: the process dies *during* the write, with
+    # half the bytes already on disk. With a plain write_text (truncate, then fill) that left a
+    # refs.json that no longer parsed at all - the repository would not even reload.
+    import builtins
+
+    repo = Repository(tmp_path)
+    repo.new(branch="main", structure=_cake(), title="v1", intent="x").commit()
+    before = (tmp_path / "refs.json").read_text(encoding="utf-8")
+
+    real_open = builtins.open
+
+    class _Torn:
+        """A file handle that writes half of what it is given, then the power goes out."""
+
+        def __init__(self, handle):
+            self._handle = handle
+
+        def write(self, text):
+            self._handle.write(text[: len(text) // 2])
+            raise KeyboardInterrupt("power cut mid-write")
+
+        def __getattr__(self, name):
+            return getattr(self._handle, name)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            self._handle.close()
+            return False
+
+    def opener(path, mode="r", *args, **kwargs):
+        handle = real_open(path, mode, *args, **kwargs)
+        # covers both the target and the ".refs.json.<pid>.tmp" the atomic write goes through
+        return _Torn(handle) if "w" in mode and "refs.json" in str(path) else handle
+
+    monkeypatch.setattr(builtins, "open", opener)
+    with pytest.raises(KeyboardInterrupt):
+        repo.new(branch="side", structure=_cake(220), title="v2", intent="x").commit()
+    monkeypatch.undo()
+
+    after = (tmp_path / "refs.json").read_text(encoding="utf-8")
+    assert after == before
+    assert json.loads(after)["branches"]["main"]  # parses, and still names the old tip
+
+    # The object file for the abandoned commit was written before the refs, so it survives on
+    # disk - an unreferenced object, exactly what git leaves behind for gc, and harmless: no
+    # branch names it. What must never happen is the mirror image, a ref naming a missing
+    # object, which is what a torn refs.json produced.
+    reloaded = Repository(tmp_path)
+    assert reloaded.get("main").title == "v1"
+    assert set(reloaded.branches) == {"main"}
+    for name in reloaded.branches:
+        assert name in reloaded  # every ref still resolves
+
+
+# -- protocol steps are matched on their number, not their slot ---------------------------------
+
+
+def _protocol_repo():
+    """main: Mélanger(1), Reposer(2), Cuire(3) - side drops the resting step and bakes hotter,
+    without renumbering what remains."""
+    repo = Repository()
+    builder = repo.new(branch="main", structure=_cake(), title="v1", intent="x")
+    builder.add_step(order=1, name="Mélanger")
+    builder.add_step(order=2, name="Reposer")
+    builder.add_step(order=3, name="Cuire", parameters={"temperature": Quantity(value=180, unit="C")})
+    v1 = builder.commit()
+
+    side = repo.derive(v1.id, new_branch="side", title="v2", intent="drop the rest, bake hotter")
+    side.steps = [s for s in side.steps if s.name != "Reposer"]
+    side.steps[-1] = side.steps[-1].model_copy(update={"parameters": {"temperature": Quantity(value=200, unit="C")}})
+    return repo, v1, side.commit()
+
+
+def test_removing_a_step_reads_as_one_removal_not_a_cascade_of_changes():
+    # Regression: steps were compared position by position, so dropping a step in the middle
+    # shifted every later one - the diff claimed "Reposer" had become "Cuire" and that "Cuire"
+    # had been deleted, when only one step was removed and one parameter changed.
+    repo, _, tip = _protocol_repo()
+    entries = {e.path: e.kind for e in repo.diff_steps("main", tip.id)}
+
+    assert entries == {"2": "removed", "3.parameters.temperature": "changed"}
+
+
+def test_a_take_steps_path_names_the_step_number_not_the_list_slot():
+    repo, _, tip = _protocol_repo()
+    merged = repo.merge(
+        "main", tip.id, title="merge", intent="take just the temperature",
+        take_steps=["3.parameters.temperature"],
+    ).commit()
+
+    by_order = {s.order: s for s in merged.steps}
+    assert set(by_order) == {1, 2, 3}  # main's resting step is kept: it was not listed
+    assert by_order[3].parameters["temperature"].value == 200  # taken from the branch
+    assert by_order[2].name == "Reposer"
+
+
+def test_taking_a_whole_step_by_its_number():
+    repo, _, tip = _protocol_repo()
+    merged = repo.merge("main", tip.id, title="merge", intent="x", take_steps=["3"]).commit()
+    assert {s.order for s in merged.steps} == {1, 2, 3}
+    assert merged.steps[-1].parameters["temperature"].value == 200
+
+
+def test_a_step_number_absent_from_the_branch_is_reported_not_silently_misread():
+    repo, _, tip = _protocol_repo()
+    with pytest.raises(PathNotFoundError, match="'2'"):
+        repo.merge("main", tip.id, title="merge", intent="x", take_steps=["2"])
+
+
+def test_merged_steps_come_back_in_protocol_order():
+    repo, v1, tip = _protocol_repo()
+    merged = repo.merge("main", tip.id, title="merge", intent="x", take_steps=["3"]).commit()
+    assert [s.order for s in merged.steps] == sorted(s.order for s in merged.steps)
+
+
+def test_step_diff_is_listed_in_protocol_order_not_lexicographic_order():
+    # keys are the order as a string, so a plain sort would read 1, 10, 11, 2
+    repo = Repository()
+    builder = repo.new(branch="main", structure=_cake(), title="v1", intent="x")
+    for order in range(1, 12):
+        builder.add_step(order=order, name=f"étape {order}")
+    v1 = builder.commit()
+
+    side = repo.derive(v1.id, new_branch="side", title="v2", intent="rename them all")
+    side.steps = [s.model_copy(update={"name": f"{s.name} bis"}) for s in side.steps]
+    tip = side.commit()
+
+    orders = [int(e.path.split(".")[0]) for e in repo.diff_steps("main", tip.id)]
+    assert orders == sorted(orders)
+    assert orders[:3] == [1, 2, 3]
+
+
+# -- the error hierarchy ------------------------------------------------------------------------
+
+
+def test_every_error_follow_raises_is_a_follow_error():
+    # Regression: FollowError was documented as the base class, but merge raised ValueError,
+    # Structure.resolve KeyError, split_path ValueError, the commit form ValueError... so
+    # `except FollowError` around a commit missed the most expected failure of all.
+    import follow
+
+    raisers = [
+        lambda: Repository().get("nope"),
+        lambda: Structure.resolve("never.Registered"),
+        lambda: split_path("steps[abc]"),
+        lambda: follow.analyze_batch([{"x": 1}, {"x": 1, "extra": 2}]),
+        lambda: follow.sweep(_cake(), "not_a_field", [1, 2]),
+        lambda: CommitForm.model_validate({"title": "t", "fields": [{"name": "a", "label": "A"}]}).validate_answers({}),
+    ]
+    for raiser in raisers:
+        with pytest.raises(FollowError):
+            raiser()
+
+
+def test_the_builtin_each_error_used_to_be_still_catches_it():
+    # callers written against the old behaviour must keep working
+    with pytest.raises(KeyError):
+        Structure.resolve("never.Registered")
+    with pytest.raises(ValueError):
+        split_path("steps[abc]")
+    with pytest.raises(ValueError):
+        CommitForm.model_validate({"title": "t", "fields": [{"name": "a", "label": "A"}]}).validate_answers({})
+
+
+# -- content addressing, step numbering, batch shape, one Quantity renderer ---------------------
+
+
+def test_identical_content_yields_the_same_id_in_a_fresh_repository():
+    # Regression: created_at was part of the hashed payload, so content_id's promise that
+    # identical payloads dedupe was false - the id depended on the clock, not on the content.
+    first = Repository().new(branch="main", structure=_cake(), title="v1", intent="x").commit()
+    second = Repository().new(branch="main", structure=_cake(), title="v1", intent="x").commit()
+    assert first.id == second.id
+
+
+def test_a_different_branch_or_parent_still_yields_a_different_id():
+    repo = Repository()
+    a = repo.new(branch="main", structure=_cake(), title="v1", intent="x").commit()
+    b = repo.new(branch="side", structure=_cake(), title="v1", intent="x").commit()
+    assert a.id != b.id  # branch is part of the content
+
+
+def test_add_step_numbers_after_the_highest_order_not_the_count():
+    # Regression: the auto order was len(steps) + 1, which collided with any hand-set order -
+    # and nothing said so until commit ran the validator.
+    repo = Repository()
+    builder = repo.new(branch="main", structure=_cake(), title="v1", intent="x")
+    builder.add_step(name="A", order=2)
+    builder.add_step(name="B")
+
+    assert [s.order for s in builder.steps] == [2, 3]
+    builder.commit()  # no longer a late ValidationError
+
+
+def test_a_field_present_only_on_a_later_entity_is_reported_not_dropped():
+    # Regression: leaf paths were read off the first entity alone, so an extra field on entity
+    # 2..N vanished from the analysis - a real DOE factor missing from the report.
+    with pytest.raises(BatchShapeError, match="extra"):
+        analyze_batch([{"x": 1}, {"x": 1, "extra": 999}])
+
+
+def test_str_and_format_value_render_a_quantity_identically():
+    # Regression: two separate implementations that had drifted - str() dropped `note`, so a
+    # fiche showed it on structure values and silently lost it on step parameters.
+    quantity = Quantity(value=200, unit="g", uncertainty=5, note="à froid")
+    assert str(quantity) == format_value(quantity.model_dump(mode="json"))
+    assert "à froid" in str(quantity)

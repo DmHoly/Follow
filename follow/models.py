@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Literal
+from typing import Any, Iterable, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .quantity import Quantity
 
 
-def _utcnow() -> datetime:
+def utcnow() -> datetime:
+    """Now, in UTC. Shared so the models and the repository cannot drift onto two clocks."""
     return datetime.now(timezone.utc)
 
 
@@ -37,6 +38,22 @@ class Step(BaseModel):
     parameters: dict[str, Quantity] = Field(default_factory=dict)
     duration: str | None = None
     depends_on: list[int] = Field(default_factory=list)
+
+
+def steps_by_order(steps: "Iterable[Step]") -> dict[str, Any]:
+    """A protocol keyed by each step's ``order``, which is what diffing and merging compare on.
+
+    Comparing two protocols position by position - the natural thing to do with two lists - is
+    only correct while both sides have the same steps in the same slots. Insert one step at the
+    top of a protocol and every later step shifts: the diff claims each one changed, and
+    ``--take-steps "[2]"`` quietly imports the step next to the intended one. ``order`` is the
+    identity a step already carries (it is what the fiche numbers it by, and it is validated
+    unique), so keying on it makes an insertion show up as exactly one added step.
+
+    Keys are the order as a string, so a path reads ``3.parameters.temperature``: the 3 is the
+    step number a reader sees in the fiche, not an offset into a list.
+    """
+    return {str(step.order): step.model_dump(mode="json") for step in steps}
 
 
 class ReferenceLink(BaseModel):
@@ -121,7 +138,7 @@ class Experiment(BaseModel):
     id: str
     parents: list[str] = Field(default_factory=list)
     branch: str
-    created_at: datetime = Field(default_factory=_utcnow)
+    created_at: datetime = Field(default_factory=utcnow)
     author: str | None = None
 
     title: str
@@ -137,6 +154,11 @@ class Experiment(BaseModel):
     evidence: list[Evidence] = Field(default_factory=list)
     conclusion: Conclusion = Field(default_factory=Conclusion)
 
+    # free-form descriptive labels ("à refaire", "pilote", "campagne-Q3"), the same
+    # never-validated spirit as `metadata`. Deliberately NOT repository tags: several experiments
+    # may carry the same label, and none of them creates a ref. A citable, immutable pointer to
+    # one experiment is a repository tag, created explicitly with
+    # :meth:`Repository.tag <follow.repository.Repository.tag>`.
     tags: list[str] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
     # answers to the repository's commit form (follow.commit_form), if one was configured -

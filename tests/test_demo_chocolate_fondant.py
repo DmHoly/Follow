@@ -1,3 +1,4 @@
+from conftest import assert_well_formed_html
 from demos.chocolate_fondant import SOURCES, build_repository, render
 
 
@@ -50,8 +51,7 @@ def test_final_validation_resolves_the_gap_and_meets_the_objective():
 def test_render_produces_a_well_formed_page_citing_all_sources():
     repo = build_repository()
     html = render(repo, embed_plotly=False)
-    assert html.count("<div") == html.count("</div>")
-    assert html.count("<tr>") == html.count("</tr>")
+    assert_well_formed_html(html)
     assert "<title>Fondant optimal</title>" in html
     for source in SOURCES:
         assert source["url"] in html

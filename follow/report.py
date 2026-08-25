@@ -22,11 +22,11 @@ import html as _html
 from typing import TYPE_CHECKING, Any, Sequence
 
 from .batch import BatchVariation
-from .diffing import StructureDiff
 from .formatting import format_value
 from .graphing import build_graph_figure
 from .merging import get_path, split_path
-from .models import Evidence, Experiment, Objective, ObjectiveResult
+from .models import Evidence, Experiment, Objective, ObjectiveResult, steps_by_order
+from .repository import FollowError
 
 if TYPE_CHECKING:
     from .repository import Repository
@@ -214,6 +214,42 @@ def _esc(value: Any) -> str:
     trusted as HTML.
     """
     return _html.escape(str(value), quote=True)
+
+
+#: Public name for :func:`_esc`, for callers outside this module that compose their own page and
+#: need to escape repository data before handing it to :func:`render_page`'s raw-HTML slots.
+escape_html = _esc
+
+
+# Schemes that execute rather than locate. An Evidence.source is a free-text pointer typed by
+# whoever wrote the experiment, so it reaches href="..." as attacker-controllable input; escaping
+# it (which _esc does) keeps it inside the attribute but does nothing about what the browser then
+# does with "javascript:...". Everything else - http, https, file, doi, notebook, a relative
+# path - is left exactly as it is: this refuses the three dangerous schemes rather than
+# allow-listing, so an unusual-but-harmless source keeps working as a link.
+_UNSAFE_URI_SCHEMES = frozenset({"javascript", "data", "vbscript"})
+
+
+def _is_safe_href(source: Any) -> bool:
+    """False for a URI whose scheme executes script instead of pointing at something.
+
+    The scheme is read after stripping whitespace and control characters, which browsers ignore
+    when parsing a URL - so ``"java\\tscript:alert(1)"`` is recognised as ``javascript:`` here too.
+    """
+    text = "".join(ch for ch in str(source) if ch.isprintable() and not ch.isspace())
+    scheme, separator, _ = text.partition(":")
+    return not (separator and scheme.lower() in _UNSAFE_URI_SCHEMES)
+
+
+def _evidence_link(evidence: Evidence) -> str:
+    """An evidence's description, linked to its source - as plain text when that source is a
+    scheme we won't put in an href (see :data:`_UNSAFE_URI_SCHEMES`). The description is still
+    shown either way: dropping the row entirely would hide a piece of evidence the experiment
+    actually cites, which is worse than showing it unlinked.
+    """
+    if not _is_safe_href(evidence.source):
+        return f'<span class="evidence-link">{_esc(evidence.description)}</span>'
+    return f'<a class="evidence-link" href="{_esc(evidence.source)}">{_esc(evidence.description)}</a>'
 
 
 def trial_card(
@@ -472,7 +508,7 @@ def results_table(objective_results: Sequence[ObjectiveResult], evidence: Sequen
             if e is None:
                 proof_links.append(_esc(eid))
             else:
-                proof_links.append(f'<a class="evidence-link" href="{_esc(e.source)}">{_esc(e.description)}</a>')
+                proof_links.append(_evidence_link(e))
         proof = ", ".join(proof_links) if proof_links else "—"
         observed = _esc(format_value(r.observed.model_dump(mode="json"))) if r.observed else "—"
         rows.append(
@@ -501,7 +537,7 @@ def results_table(objective_results: Sequence[ObjectiveResult], evidence: Sequen
     unlinked_html = ""
     if unlinked:
         items = "".join(
-            f'<div><a class="evidence-link" href="{_esc(e.source)}">{_esc(e.description)}</a>'
+            f"<div>{_evidence_link(e)}"
             + "".join(
                 f' <span class="evidence-metric">· {_esc(k)}: {_esc(format_value(v.model_dump(mode="json")))}</span>'
                 for k, v in e.metrics.items()
@@ -521,6 +557,7 @@ def experiment_fiche(
     parents: Sequence[tuple[str, str, str]] = (),
     parents_label: str = "Filiation",
     split: str = "",
+    extra_rows: str = "",
 ) -> str:
     """The complete, ergonomic fiche for one experiment, straight from its own fields, in one
     reading order: **résumé** (intention + hypothèse) → **objectifs** de l'étude → the split
@@ -532,6 +569,11 @@ def experiment_fiche(
     argument), this takes a real :class:`~follow.models.Experiment` and escapes its own text -
     the one-call entry point for rendering an experiment as-is. ``parents`` and ``badges_extra``
     work exactly like :func:`fiche_card`'s.
+
+    ``extra_rows`` is raw ``.fiche-row`` HTML appended inside the card, after the conclusion -
+    the slot :func:`render_study_html` uses for its lineage block. It exists because the caller
+    previously reached in and cut the closing ``</div>`` off the returned string to splice its
+    own rows in, which silently depended on this function's exact indentation.
     """
     badges = [experiment.conclusion.status]
     if experiment.conclusion.decision:
@@ -568,6 +610,7 @@ def experiment_fiche(
     ]
     body = "\n".join(part for part in body_parts if part)
 
+    extra_rows_html = f"\n{extra_rows}" if extra_rows else ""
     conclusion_text = _esc(experiment.conclusion.summary) if experiment.conclusion.summary else "—"
     next_steps_html = ""
     if experiment.conclusion.next_steps:
@@ -598,8 +641,60 @@ def experiment_fiche(
       <div class="fiche-row">
         <div class="fiche-label">Conclusion</div>
         <p class="fiche-text">{conclusion_text}</p>
-      </div>{next_steps_html}
+      </div>{next_steps_html}{extra_rows_html}
     </div>"""
+
+
+def status_legend(*, neutral_label: str = "draft / running") -> str:
+    """The colour key for :func:`graph_section`'s node statuses, matching
+    :data:`follow.graphing._STATUS_COLORS`. ``neutral_label`` is the only part demos ever varied.
+    """
+    return f"""      <div class="graph-legend">
+        <span class="legend-item good"><span class="legend-dot"></span>concluded &middot; promote</span>
+        <span class="legend-item explore"><span class="legend-dot"></span>concluded &middot; branch (exploration)</span>
+        <span class="legend-item bad"><span class="legend-dot"></span>abandoned</span>
+        <span class="legend-item neutral"><span class="legend-dot"></span>{neutral_label}</span>
+      </div>"""
+
+
+def graph_section(
+    repo: "Repository",
+    *,
+    heading: str,
+    description: str = "",
+    embed_plotly: bool = True,
+    label: str = "Graphe de filiation",
+    div_id: str = "follow-graph",
+    legend: str = "",
+) -> str:
+    """The lineage graph as a ready-to-drop ``<section>``: Plotly figure, framing and caption.
+
+    Every demo built this block by hand and :func:`render_study_html` had a sixth copy - the same
+    ``fig.to_html`` call down to ``modeBarButtonsToRemove``, wrapped in the same
+    ``.graph-frame``/``.graph-inner`` markup. Only ``heading`` and ``description`` ever differed,
+    so those are the arguments; both are inserted as raw HTML (callers compose ``<code>`` into
+    them), like :func:`render_page`'s own flow slots. Pass ``legend=status_legend()`` to add
+    the colour key under the figure.
+    """
+    plot_html = build_graph_figure(repo).to_html(
+        include_plotlyjs=True if embed_plotly else "cdn",
+        full_html=False,
+        div_id=div_id,
+        config={"displaylogo": False, "responsive": True, "modeBarButtonsToRemove": ["toImage"]},
+    )
+    caption = f'\n      <p class="section-desc">{description}</p>' if description else ""
+    legend_html = f"\n{legend}" if legend else ""
+    return f"""  <section class="section">
+    <div class="section-head">
+      <div class="section-label">{label}</div>
+      <h2 class="section-title">{heading}</h2>{caption}
+    </div>
+    <div class="graph-frame">
+      <div class="graph-inner">
+        {plot_html}
+      </div>{legend_html}
+    </div>
+  </section>"""
 
 
 def render_page(
@@ -615,14 +710,21 @@ def render_page(
 ) -> str:
     """Assemble a themed, self-contained page from pre-rendered section HTML.
 
-    ``stat_chips`` are raw inner-HTML strings for ``.stat-chip`` spans; ``sections`` and
-    ``footer`` are raw ``<section class="section">...</section>``/``<footer>...</footer>``
-    blocks the caller builds with the CSS vocabulary above.
+    Two different contracts, by position in the document rather than by convention:
+
+    - ``title`` and ``description`` land in a ``<title>`` element and a ``content="..."``
+      attribute, where markup is never meaningful and an unescaped value can only break out of
+      its context - so both are escaped here, unconditionally.
+    - ``eyebrow``, ``heading``, ``subtitle``, ``stat_chips``, ``sections`` and ``footer`` are
+      inserted as raw HTML, because callers legitimately compose them (``<b>12</b> commits``,
+      a ``<code>main</code>`` in a sentence, whole ``<section>`` blocks). **Anything derived
+      from repository data must be escaped by the caller with :func:`escape_html` before it
+      gets here** - see how :func:`follow.cli.cmd_explode` passes an experiment's own title.
     """
     chips = "\n".join(f'      <span class="stat-chip">{c}</span>' for c in stat_chips)
     body_sections = "\n\n".join(sections)
-    return f"""<title>{title}</title>
-<meta name="description" content="{description}" />
+    return f"""<title>{_esc(title)}</title>
+<meta name="description" content="{_esc(description)}" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -715,7 +817,8 @@ def _merge_attribution_html(repo: "Repository", exp: Experiment) -> str:
         if kind == "structure":
             merged_dump: Any = repo.load_structure(exp).model_dump(mode="json")
         else:
-            merged_dump = [s.model_dump(mode="json") for s in exp.steps]
+            # keyed by order, matching the paths repo.diff_steps now reports
+            merged_dump = steps_by_order(exp.steps)
         for entry in diff_ab:
             tokens = split_path(entry.path)
             try:
@@ -766,10 +869,9 @@ def _experiment_section(repo: "Repository", exp: Experiment, index: int, total: 
     ]
     parents_label = "Filiation (fusion)" if len(exp.parents) == 2 else "Filiation"
 
-    card = experiment_fiche(exp, parents=parents, parents_label=parents_label)
-    lineage = _lineage_html(repo, exp)
-    if lineage:
-        card = card[: -len("\n    </div>")] + "\n" + lineage + "\n    </div>"
+    card = experiment_fiche(
+        exp, parents=parents, parents_label=parents_label, extra_rows=_lineage_html(repo, exp)
+    )
 
     return f"""  <section class="section" id="{_esc(exp.id)}">
     <div class="section-head">
@@ -835,25 +937,14 @@ def render_study_html(
 
     graph_html = ""
     try:
-        fig = build_graph_figure(repo)
-        plot_html = fig.to_html(
-            include_plotlyjs=True if embed_plotly else "cdn",
-            full_html=False,
-            div_id="follow-graph",
-            config={"displaylogo": False, "responsive": True, "modeBarButtonsToRemove": ["toImage"]},
-        )
-        graph_html = f"""  <section class="section">
-    <div class="section-head">
-      <div class="section-label">Graphe de filiation</div>
-      <h2 class="section-title">follow graph</h2>
-    </div>
-    <div class="graph-frame">
-      <div class="graph-inner">
-        {plot_html}
-      </div>
-    </div>
-  </section>"""
+        graph_html = graph_section(repo, heading="follow graph", embed_plotly=embed_plotly)
+    except FollowError:
+        # a corrupt lineage (a cycle) is a problem with the repository's data, not with drawing
+        # it - silently dropping the figure would hide the one thing the reader needs to know
+        raise
     except Exception:
+        # a rendering failure (plotly, the figure serialisation) costs the graph section and
+        # nothing else: the rest of the report is still worth producing
         graph_html = ""
 
     sections = [s for s in [_index_html(experiments), graph_html] if s]
@@ -869,8 +960,8 @@ def render_study_html(
         title=title,
         description=description,
         eyebrow="Follow · compte rendu d'étude",
-        heading=title,
-        subtitle=description,
+        heading=_esc(title),
+        subtitle=_esc(description),
         stat_chips=stat_chips,
         sections=sections,
         footer=footer,

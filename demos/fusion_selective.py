@@ -10,13 +10,12 @@ Run: python -m demos.fusion_selective [--out demos/output/fusion_selective.html]
 
 from __future__ import annotations
 
-import argparse
-from pathlib import Path
 
+from demos._main import run_demo
 from demos._report import fiche_card, render_report, resolution_conflict_row, resolution_plain_row, trial_card
 from examples.recipe import BakeStep, CakeRecipe
 from follow import Quantity, Repository
-from follow.graphing import build_graph_figure
+from follow.report import graph_section, status_legend
 
 
 def _recipe() -> CakeRecipe:
@@ -129,7 +128,7 @@ def build_repository() -> Repository:
             "Combiner le melange ameliore (main) et la temperature de cuisson validee sur la "
             "branche d'essai, sans reprendre le reste de l'exploration."
         ),
-        take_steps=["[2]"],
+        take_steps=["3"],
     )
     merge_b.conclude(
         status="concluded",
@@ -146,40 +145,19 @@ def build_repository() -> Repository:
 
 def render(repo: Repository, *, embed_plotly: bool) -> str:
     history = repo.log("essai-cuisson")  # a3, a2, a1, v1 (newest first)
-    a3, a2, a1, v1 = history[0], history[1], history[2], history[3]
+    a3, a2, a1 = history[0], history[1], history[2]
     v2 = [e for e in repo if e.branch == "main" and e.title == "Melange plus long"][0]
     merged = repo.get("main")
 
-    fig = build_graph_figure(repo)
-    plot_html = fig.to_html(
-        include_plotlyjs=True if embed_plotly else "cdn",
-        full_html=False,
-        div_id="follow-graph",
-        config={"displaylogo": False, "responsive": True, "modeBarButtonsToRemove": ["toImage"]},
+    graph_section_html = graph_section(
+        repo,
+        heading="follow graph — rendu Plotly, sans Graphviz",
+        description=(
+            "Disposition en couches calculee par Follow lui-meme (une rangee par generation). Le commit de fusion est le seul noeud a deux aretes entrantes : il descend a la fois de la pointe de <code>main</code> et de la pointe de <code>essai-cuisson</code>."
+        ),
+        legend=status_legend(neutral_label="draft / running"),
+        embed_plotly=embed_plotly,
     )
-
-    graph_section = f"""  <section class="section">
-    <div class="section-head">
-      <div class="section-label">Graphe de filiation</div>
-      <h2 class="section-title">follow graph — rendu Plotly, sans Graphviz</h2>
-      <p class="section-desc">
-        Disposition en couches calculee par Follow lui-meme (une rangee par generation). Le
-        commit de fusion est le seul noeud a deux aretes entrantes : il descend a la fois de la
-        pointe de <code>main</code> et de la pointe de <code>essai-cuisson</code>.
-      </p>
-    </div>
-    <div class="graph-frame">
-      <div class="graph-inner">
-        {plot_html}
-      </div>
-      <div class="graph-legend">
-        <span class="legend-item good"><span class="legend-dot"></span>concluded &middot; promote</span>
-        <span class="legend-item explore"><span class="legend-dot"></span>concluded &middot; branch (exploration)</span>
-        <span class="legend-item bad"><span class="legend-dot"></span>abandoned</span>
-        <span class="legend-item neutral"><span class="legend-dot"></span>draft / running</span>
-      </div>
-    </div>
-  </section>"""
 
     trials_section = f"""  <section class="section">
     <div class="section-head">
@@ -206,7 +184,7 @@ def render(repo: Repository, *, embed_plotly: bool) -> str:
     resolution_section = f"""  <section class="section">
     <div class="section-head">
       <div class="section-label">Resolution de la fusion</div>
-      <h2 class="section-title">follow merge main essai-cuisson --take-steps "[2]"</h2>
+      <h2 class="section-title">follow merge main essai-cuisson --take-steps "3"</h2>
       <p class="section-desc">
         Pendant que la branche explorait la cuisson, <code>main</code> a evolue de son cote (un
         melange plus long, etape 1). Les deux lignes divergent donc sur deux etapes — Follow ne
@@ -225,7 +203,7 @@ def render(repo: Repository, *, embed_plotly: bool) -> str:
     step_index=2, step_name="Etape 3 — Cuire",
     left_src="main", left_val="170°C / 35 min", left_note="Valeur de reference, jamais retestee sur main",
     right_src="essai-cuisson", right_val="175°C / 32 min", right_note="Valide apres 3 essais (voir ci-dessus)",
-    winner="right", flag_text='--take-steps "[2]" &rarr; valeur de ref_b (essai-cuisson) explicitement demandee', arrow="&rarr;",
+    winner="right", flag_text='--take-steps "3" &rarr; valeur de ref_b (essai-cuisson) explicitement demandee', arrow="&rarr;",
 )}
 {resolution_plain_row(3, "Etape 4 — Refroidir")}
 {resolution_plain_row(4, "Etape 5 — Demouler")}
@@ -263,7 +241,7 @@ def render(repo: Repository, *, embed_plotly: bool) -> str:
       <div class="cmd">follow merge main essai-cuisson --repo labo \\</div>
       <div>&nbsp;&nbsp;--title "Fusion : temperature de cuisson optimisee" \\</div>
       <div>&nbsp;&nbsp;--intent "Adopter la cuisson validee sans reprendre le reste" \\</div>
-      <div>&nbsp;&nbsp;--take-steps "[2]" --out merge.json</div>
+      <div>&nbsp;&nbsp;--take-steps "3" --out merge.json</div>
       <br />
       <div class="cmd">follow commit merge.json --repo labo</div>
       <div>{merged.id[:14]}…  (main)  {merged.title}</div>
@@ -292,24 +270,18 @@ def render(repo: Repository, *, embed_plotly: bool) -> str:
             "<b>1</b> fusion (2 parents)",
             "<b>1</b> chemin repris de la branche",
         ],
-        sections=[graph_section, trials_section, resolution_section, fiche_section],
+        sections=[graph_section_html, trials_section, resolution_section, fiche_section],
         footer=footer,
     )
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--out", default="demos/output/fusion_selective.html")
-    parser.add_argument("--embed", action="store_true", help="embed plotly.js (~4.8MB, fully offline) instead of using the CDN")
-    args = parser.parse_args()
-
-    repo = build_repository()
-    html = render(repo, embed_plotly=args.embed)
-
-    out = Path(args.out)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(html, encoding="utf-8")
-    print(f"wrote {out} ({out.stat().st_size} bytes)")
+    run_demo(
+        doc=__doc__,
+        default_out="demos/output/fusion_selective.html",
+        build_repository=build_repository,
+        render=render,
+    )
 
 
 if __name__ == "__main__":

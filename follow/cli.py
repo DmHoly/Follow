@@ -22,8 +22,8 @@ from .batch import analyze_batch
 from .entities import find_entity_mentions
 from .formatting import format_value
 from .graphing import render_graph_html
-from .rendering import render_fiche, render_log
-from .report import batch_table, render_page, render_study_html
+from .rendering import log_line, render_fiche
+from .report import batch_table, escape_html, render_page, render_study_html
 from .repository import FollowError, Repository
 from .structure import Structure
 
@@ -68,7 +68,7 @@ def _read_structure_payload(path: str) -> dict[str, Any]:
     hand-edited JSON with a syntax error - into a clean one-line message instead of a traceback.
     """
     try:
-        text = Path(path).read_text()
+        text = Path(path).read_text(encoding="utf-8")
     except FileNotFoundError as exc:
         raise SystemExit(f"fichier introuvable : {path}") from exc
     except IsADirectoryError as exc:
@@ -102,7 +102,9 @@ def _write_draft(out: Path, builder: Any, *, force: bool) -> int | None:
     """
     if out.exists() and not force:
         return _fail(f"{out} existe déjà - passez --force pour l'écraser, ou choisissez un autre --out")
-    out.write_text(json.dumps(builder.to_draft(), indent=2, ensure_ascii=False))
+    # ensure_ascii=False keeps accented titles readable in the draft, so the encoding has to
+    # be pinned: the platform default would mangle them on a non-UTF-8 locale
+    out.write_text(json.dumps(builder.to_draft(), indent=2, ensure_ascii=False), encoding="utf-8")
     return None
 
 
@@ -118,7 +120,7 @@ def cmd_init(args: argparse.Namespace) -> int:
     (path / "objects").mkdir(parents=True, exist_ok=True)
     refs_file = path / "refs.json"
     if not refs_file.exists():
-        refs_file.write_text(json.dumps({"branches": {}, "tags": {}}, indent=2))
+        refs_file.write_text(json.dumps({"branches": {}, "tags": {}}, indent=2), encoding="utf-8")
     print(f"Dépôt Follow initialisé dans {path}")
     return 0
 
@@ -181,22 +183,22 @@ def cmd_commit(args: argparse.Namespace) -> int:
         _load_structure_class(payload["structure_type"])
         builder = repo.load_draft(payload)
         experiment = builder.commit()
-    except (ValidationError, FollowError, KeyError, ValueError) as exc:
+    except (FollowError, ValidationError) as exc:  # Follow's own errors, plus pydantic's on a hand-edited draft
         return _fail(str(exc))
     print(f"{experiment.id}  ({experiment.branch})  {experiment.title}")
     return 0
 
 
 def cmd_log(args: argparse.Namespace) -> int:
-    if args.number < 0:
+    if args.number is not None and args.number < 0:
         return _fail("-n/--number doit être positif")
     repo = _repo(args.repo)
     try:
         history = repo.log(args.ref)
     except FollowError as exc:
         return _fail(str(exc))
-    for exp in history[: args.number]:
-        print(f"{exp.id}  ({exp.branch})  {exp.title}  [{exp.conclusion.status}]")
+    for exp in history if args.number is None else history[: args.number]:
+        print(log_line(exp))
     return 0
 
 
@@ -223,7 +225,7 @@ def cmd_trace(args: argparse.Namespace) -> int:
     for exp in matches:
         paths = find_entity_mentions(exp.structure, args.entity_id)
         where = ", ".join(p or "(racine)" for p in paths)
-        print(f"{exp.id}  ({exp.branch})  {exp.title}  [{exp.conclusion.status}]  -- {where}")
+        print(log_line(exp, suffix=f"  -- {where}"))
     return 0
 
 
@@ -267,7 +269,7 @@ def cmd_merge(args: argparse.Namespace) -> int:
             author=args.author,
             hypothesis=args.hypothesis,
         )
-    except (FollowError, ValueError, KeyError, IndexError, TypeError) as exc:
+    except FollowError as exc:
         return _fail(str(exc))
     out = Path(args.out)
     if (failure := _write_draft(out, builder, force=args.force)) is not None:
@@ -286,7 +288,7 @@ def cmd_branch(args: argparse.Namespace) -> int:
     if args.at is None:
         return _fail("--at <ref> est requis pour créer/déplacer une branche")
     try:
-        repo.branch(args.name, args.at)
+        repo.branch(args.name, args.at, force=args.force)
     except FollowError as exc:
         return _fail(str(exc))
     print(f"branche '{args.name}' -> {repo.get(args.name).id}")
@@ -338,16 +340,20 @@ def cmd_explode(args: argparse.Namespace) -> int:
 
     try:
         variation = analyze_batch(entities, ignore=args.ignore)
-    except (KeyError, IndexError, TypeError) as exc:
+    except FollowError as exc:
         return _fail(f"entités hétérogènes dans {args.path!r}: {exc}")
 
     if args.out is not None:
-        section = batch_table(variation, title=f"{experiment.title} — {args.path}")
+        # the experiment's own title is repository data, not a literal this command controls:
+        # render_page inserts heading/subtitle as raw HTML, so it is escaped here before it gets
+        # there (title/description are escaped by render_page itself, being attribute/text slots)
+        page_title = f"{experiment.title} — {args.path}"
+        section = batch_table(variation, title=page_title)
         html = render_page(
-            title=f"{experiment.title} — {args.path}",
+            title=page_title,
             description=f"Vue explosée de {args.path!r} pour l'expérience {experiment.id}.",
             eyebrow="Follow · vue explosée",
-            heading=f"{experiment.title} — {args.path}",
+            heading=escape_html(page_title),
             subtitle=f"{variation.entity_count} entités, {len(variation.varying)} paramètre(s) variable(s).",
             stat_chips=[f"<b>{variation.entity_count}</b> entités", f"<b>{len(variation.varying)}</b> variables"],
             sections=[f'  <section class="section">\n{section}\n  </section>'],
@@ -479,7 +485,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_log = subparsers.add_parser("log", help="historique d'une branche/tag/expérience")
     add_repo_arg(p_log)
     p_log.add_argument("ref", nargs="?", default="main")
-    p_log.add_argument("-n", "--number", type=int, default=10**9)
+    p_log.add_argument("-n", "--number", type=int, default=None, help="limiter aux N plus récents (défaut : tout)")
     p_log.set_defaults(func=cmd_log)
 
     p_show = subparsers.add_parser("show", help="afficher la fiche d'une expérience")
@@ -506,6 +512,11 @@ def build_parser() -> argparse.ArgumentParser:
     add_repo_arg(p_branch)
     p_branch.add_argument("name", nargs="?")
     p_branch.add_argument("--at", help="id/branche/tag à pointer")
+    p_branch.add_argument(
+        "--force",
+        action="store_true",
+        help="déplacer une branche existante vers un commit dont sa pointe ne descend pas (abandonne cet historique)",
+    )
     p_branch.set_defaults(func=cmd_branch)
 
     p_tag = subparsers.add_parser("tag", help="lister ou créer un tag")

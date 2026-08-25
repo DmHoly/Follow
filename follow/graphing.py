@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from collections import deque
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import plotly.graph_objects as go
+
+from .repository import FollowError
 
 if TYPE_CHECKING:
     from .repository import Repository
@@ -18,19 +21,49 @@ _BRANCH_LABEL_COLOR = "#8a6d00"
 
 
 def _depths(dag: dict[str, list[str]]) -> dict[str, int]:
-    """Longest-path-from-a-root depth for each node, used as the layer/row of a layered layout."""
-    depths: dict[str, int] = {}
+    """Longest-path-from-a-root depth for each node, used as the layer/row of a layered layout.
 
-    def depth(node: str) -> int:
-        if node in depths:
-            return depths[node]
-        depths[node] = 0  # guard against cycles, which shouldn't exist but must not hang
-        parents = [p for p in dag.get(node, []) if p in dag]
-        depths[node] = 0 if not parents else 1 + max(depth(p) for p in parents)
-        return depths[node]
+    Computed by topological (Kahn) traversal rather than recursion. A recursive walk here recursed
+    once per generation, so its stack depth was the length of the lineage - and, because it
+    memoised as it went, whether it stayed flat or went all the way down depended on the order the
+    dict happened to be iterated in. That order comes from ``objects_dir.glob("*.json")`` on load,
+    which is not guaranteed: the same repository could render fine in one process and raise
+    ``RecursionError`` in the next. Iteration removes the failure mode entirely, whatever the
+    order.
 
-    for node in dag:
-        depth(node)
+    A cycle raises :class:`~follow.repository.FollowError`. Lineage cycles cannot occur in a
+    healthy repository (a commit's id is derived from content that already includes its parents,
+    so a parent always exists before its child), which is exactly why one means the repository is
+    corrupt - and drawing a plausible-looking graph with silently wrong depths, as the previous
+    cycle "guard" did, hides that.
+    """
+    parents = {node: [p for p in dag.get(node, []) if p in dag] for node in dag}
+    children: dict[str, list[str]] = {node: [] for node in dag}
+    for node, node_parents in parents.items():
+        for parent in node_parents:
+            children[parent].append(node)
+
+    remaining = {node: len(node_parents) for node, node_parents in parents.items()}
+    queue = deque(sorted(node for node, count in remaining.items() if count == 0))
+    depths = dict.fromkeys(dag, 0)
+
+    resolved = 0
+    while queue:
+        node = queue.popleft()
+        resolved += 1
+        for child in children[node]:
+            depths[child] = max(depths[child], depths[node] + 1)
+            remaining[child] -= 1
+            if remaining[child] == 0:
+                queue.append(child)
+
+    if resolved != len(dag):
+        stuck = sorted(node for node, count in remaining.items() if count > 0)
+        raise FollowError(
+            f"lineage cycle in the experiment graph, involving {stuck[:5]}"
+            f"{' and others' if len(stuck) > 5 else ''} - an experiment cannot descend from "
+            "itself, so this repository's parent links are corrupt and no ordering of them exists"
+        )
     return depths
 
 
@@ -50,7 +83,7 @@ def _layout(dag: dict[str, list[str]]) -> dict[str, tuple[float, float]]:
         if d == 0:
             nodes.sort()
         else:
-            def barycenter(node: str, _d: int = d) -> float:
+            def barycenter(node: str) -> float:
                 xs = [positions[p][0] for p in dag.get(node, []) if p in positions]
                 return sum(xs) / len(xs) if xs else 0.0
 
@@ -92,19 +125,18 @@ def build_graph_figure(repo: "Repository") -> go.Figure:
         showlegend=False,
     )
 
+    # positions come from repo.graph(), which is built from these same experiments, so every
+    # node id resolves - the previous `if exp else` fallbacks were unreachable
     node_x, node_y, colors, labels, hover = [], [], [], [], []
     for node_id, (x, y) in positions.items():
-        exp = experiments.get(node_id)
+        exp = experiments[node_id]
         node_x.append(x)
         node_y.append(y)
-        status = exp.conclusion.status if exp else "draft"
-        colors.append(_STATUS_COLORS.get(status, "#9e9e9e"))
-        labels.append(exp.title if exp else node_id)
+        colors.append(_STATUS_COLORS.get(exp.conclusion.status, "#9e9e9e"))
+        labels.append(exp.title)
         hover.append(
             f"{exp.title}<br>id: {exp.id}<br>branche: {exp.branch}<br>"
             f"statut: {exp.conclusion.status}<br>intention: {exp.intent}"
-            if exp
-            else node_id
         )
 
     node_trace = go.Scatter(

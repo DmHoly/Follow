@@ -9,6 +9,7 @@ branches that happen to hold completely different Structure subclasses.
 from __future__ import annotations
 
 from examples.chocolate_fondant import Mold, MoltenChocolateCake
+from conftest import assert_well_formed_html
 from examples.mosfet import Layer, MOSFETStructure
 from examples.recipe import BakeStep, CakeRecipe
 from examples.solar_cell import PNJunction, SolarCell, SolarModule
@@ -161,9 +162,20 @@ def test_cross_domain_diff_does_not_crash_it_is_just_meaningless():
     recipe_v1, _ = domains["recipe"]
     mosfet_v1, _ = domains["mosfet"]
     diff = diff_structures(repo.load_structure(recipe_v1), repo.load_structure(mosfet_v1))
-    assert len(diff) > 0
-    kinds = {e.kind for e in diff}
-    assert kinds <= {"added", "removed", "changed"}
+
+    # `kinds <= {"added", "removed", "changed"}` used to stand here, which DiffEntry.kind being a
+    # Literal already guarantees: the assertion could not fail whatever _walk did. What actually
+    # characterises a cross-domain diff is that neither side's fields survive as "changed" - the
+    # recipe's are gone, the MOSFET's are new - so that is what is checked.
+    by_kind = {kind: sorted(e.path for e in diff if e.kind == kind) for kind in ("added", "removed", "changed")}
+
+    assert by_kind["removed"] == ["bake", "ingredients", "name"]  # every recipe field, gone
+    assert by_kind["added"] == ["channel_doping", "drain", "gate_length", "gate_oxide", "source"]
+    assert by_kind["changed"] == []  # the two share no field name, so nothing is a modification
+
+    # and the walk stops at the top level rather than descending into shapes that have no
+    # counterpart: "ingredients" is reported once, not once per ingredient
+    assert not any(entry.path.startswith("ingredients.") for entry in diff)
 
 
 def test_graph_includes_every_domain_and_renders_without_error():
@@ -184,7 +196,7 @@ def test_graph_includes_every_domain_and_renders_without_error():
 def test_automatic_report_covers_every_domain_without_error():
     repo, domains = _build_multi_domain_repo()
     html = render_study_html(repo, embed_plotly=False)
-    assert html.count("<div") == html.count("</div>")
+    assert_well_formed_html(html)
     for _, (v1, v2) in domains.items():
         assert f'id="{v1.id}"' in html
         assert f'id="{v2.id}"' in html

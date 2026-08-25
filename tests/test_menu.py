@@ -35,25 +35,44 @@ class _Fake:
 
 
 def _script(monkeypatch, answers):
-    """Replace every questionary prompt function with one that pops the next canned answer, in
-    the exact order the action under test calls them. questionary.print is silenced but recorded
-    for assertions that need to check what was shown.
+    """Replace every questionary prompt with one that pops the next canned answer, in the order
+    the action under test asks for them. ``questionary.print`` is silenced but recorded, for
+    assertions that check what was shown.
+
+    The queue is positional, which is the nature of scripting a wizard - but running out used to
+    fail with a bare "asked for more answers than the test scripted", leaving you to work out
+    *which* prompt from a list of a dozen bare values. The transcript below names the prompt that
+    ran out and replays everything answered before it, so a question inserted mid-action points
+    straight at itself instead of at the tail of the queue.
     """
-    queue = iter(answers)
-    printed = []
+    queue = iter(list(answers))
 
-    def _next(*_args, **_kwargs):
-        try:
-            return _Fake(next(queue))
-        except StopIteration:
-            raise AssertionError("action asked for more answers than the test scripted") from None
+    class _Printed(list):
+        transcript: list = []
 
-    monkeypatch.setattr(questionary, "text", _next)
-    monkeypatch.setattr(questionary, "select", _next)
-    monkeypatch.setattr(questionary, "confirm", _next)
-    monkeypatch.setattr(questionary, "checkbox", _next)
-    monkeypatch.setattr(questionary, "path", _next)
+    printed = _Printed()
+    transcript = []
+
+    def _prompt(kind):
+        def _ask(*args, **_kwargs):
+            message = str(args[0]) if args else ""
+            try:
+                value = next(queue)
+            except StopIteration:
+                raise AssertionError(
+                    f"the action asked for an answer the test did not script: "
+                    f"{kind}({message!r}).\nAlready answered, in order:\n  "
+                    + "\n  ".join(f"{i}. {k}({m!r}) -> {v!r}" for i, (k, m, v) in enumerate(transcript, 1))
+                ) from None
+            transcript.append((kind, message, value))
+            return _Fake(value)
+
+        return _ask
+
+    for kind in ("text", "select", "confirm", "checkbox", "path"):
+        monkeypatch.setattr(questionary, kind, _prompt(kind))
     monkeypatch.setattr(questionary, "print", lambda *a, **k: printed.append(" ".join(str(x) for x in a)))
+    printed.transcript = transcript  # type: ignore[attr-defined]
     return printed
 
 

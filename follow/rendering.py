@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from .diffing import StructureDiff, diff_structures
+from .diffing import diff_structures
 from .formatting import format_value, is_quantity_leaf
 from .models import Experiment
 
@@ -153,11 +153,19 @@ def render_fiche(experiment: Experiment, repo: "Repository") -> str:
     return "\n".join(lines)
 
 
+def log_line(experiment: Experiment, suffix: str = "") -> str:
+    """One `git log --oneline`-style line for an experiment, optionally with a trailing note.
+
+    The same four fields were formatted in three places - here, ``follow log`` and
+    ``follow trace`` - so the three had already started to be a maintenance question: change the
+    shape in one and the other two silently disagree.
+    """
+    line = f"{experiment.id}  ({experiment.branch})  {experiment.title}  [{experiment.conclusion.status}]"
+    return f"{line}{suffix}"
+
+
 def render_log(repo: "Repository", ref: str) -> str:
     """A `git log --oneline`-style history of one branch/tag/experiment's lineage."""
-    lines = []
-    for exp in repo.log(ref):
-        lines.append(f"{exp.id}  ({exp.branch})  {exp.title}  [{exp.conclusion.status}]")
-    return "\n".join(lines)
+    return "\n".join(log_line(exp) for exp in repo.log(ref))
 
 

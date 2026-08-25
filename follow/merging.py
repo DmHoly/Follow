@@ -4,6 +4,8 @@ import copy
 import re
 from typing import Any, Iterable
 
+from .errors import MalformedPathError, PathNotFoundError
+
 _TOKEN = re.compile(r"\.?([^.\[\]]+)|\[(\d+)\]")
 
 
@@ -25,7 +27,7 @@ def split_path(path: str) -> list[str | int]:
     while pos < len(path):
         match = _TOKEN.match(path, pos)
         if match is None:
-            raise ValueError(f"malformed path {path!r}: unexpected {path[pos:pos + 20]!r} at position {pos}")
+            raise MalformedPathError(f"malformed path {path!r}: unexpected {path[pos:pos + 20]!r} at position {pos}")
         name, index = match.groups()
         tokens.append(int(index) if index is not None else name)
         pos = match.end()
@@ -62,16 +64,16 @@ def resolve_merge_paths(ours: Any, theirs: Any, take_from_theirs: Iterable[str])
     for path in take_from_theirs:
         tokens = split_path(path)
         if not tokens:
-            raise ValueError(
+            raise MalformedPathError(
                 f"cannot take the whole root object via an empty path ({path!r}); "
                 "pass explicit sub-paths (e.g. from repo.diff(...)) instead"
             )
         try:
             value = get_path(theirs, tokens)
         except (KeyError, IndexError, TypeError) as exc:
-            raise KeyError(f"path {path!r} not found on the side being taken from: {exc}") from exc
+            raise PathNotFoundError(f"path {path!r} not found on the side being taken from: {exc}") from exc
         try:
             _set(merged, tokens, copy.deepcopy(value))
         except (KeyError, IndexError, TypeError) as exc:
-            raise KeyError(f"path {path!r} not found on the side being kept: {exc}") from exc
+            raise PathNotFoundError(f"path {path!r} not found on the side being kept: {exc}") from exc
     return merged
