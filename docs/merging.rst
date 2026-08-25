@@ -39,7 +39,7 @@ deux références automatiques : ``baseline`` vers le premier parent, ``merge_so
 second.
 
 Résolution manuelle avec :func:`~follow.paths.merging.resolve_merge_paths`
-------------------------------------------------------------------------
+---------------------------------------------------------------------------
 
 :meth:`Repository.merge() <follow.storage.repository.Repository.merge>` s'appuie sur
 :func:`follow.paths.merging.resolve_merge_paths`, directement réutilisable :

@@ -107,7 +107,7 @@ bout en bout (`demos/chocolate_cake_optimization.py`).
 | `entity_id` / `find_entity` | Une même entité physique (moule, wafer...), retrouvée entre plusieurs expériences séparées par son nom, sans référence à poser. | — |
 
 Follow ne réutilise pas git en interne : les notions de version/branche/parenté sont
-réimplémentées spécifiquement pour ce domaine (voir `follow/repository.py`), avec des
+réimplémentées spécifiquement pour ce domaine (voir `follow/storage/repository.py`), avec des
 identifiants adressés par contenu (comme les SHA de git) mais sans dépendre d'un vrai dépôt git.
 
 ## Modéliser un domaine (générique + guidé)
@@ -182,7 +182,7 @@ print(repo.diff(baseline.id, committed.id))  # uniquement les paramètres qui on
 
 `repo.log("main")`, `repo.branch(...)`, `repo.tag(...)` et `render_graph_html(repo, "graph.html")`
 (graphe de filiation interactif, voir plus bas) complètent l'API — voir les docstrings de
-`follow/repository.py` et `follow/rendering.py`.
+`follow/storage/repository.py` et `follow/presentation/rendering.py`.
 
 ## CLI façon git
 
@@ -274,7 +274,7 @@ seul champ — une étape est désignée par son `order`, celui que la fiche aff
 position dans la liste, si bien qu'un chemin garde son sens même quand les deux protocoles n'ont
 pas la même longueur). Tout chemin non listé garde la valeur du premier réf (`ref_a`, la cible de la fusion) —
 exactement comme un hunk de `git merge` qu'on ne touche pas. Voir `Repository.merge` et
-`resolve_merge_paths` (`follow/merging.py`) côté Python.
+`resolve_merge_paths` (`follow/paths/merging.py`) côté Python.
 
 ## Une expérience, N variantes (`follow explode`)
 
@@ -420,7 +420,7 @@ formulaire d'interface plutôt que seulement valider du texte. Voir
 
 `follow report` transforme un dépôt (ou le lignage d'une branche) en une page HTML autonome,
 lisible comme le compte rendu d'une étude complète — sans IA, sans moteur de template externe :
-tout vient des champs déjà présents dans les expériences (`follow/report.py`, pure f-strings
+tout vient des champs déjà présents dans les expériences (`follow/presentation/report.py`, pure f-strings
 Python, zéro nouvelle dépendance au-delà de Plotly déjà utilisé par `follow graph`).
 
 ```bash
