@@ -87,6 +87,12 @@ class Evidence(BaseModel):
     """A pointer to data that backs this experiment. Follow never owns or stores the data itself,
     only a reference to it (a path, URI, or DOI), what it claims to show, and optionally a
     checksum so the reference can later be verified against the actual file.
+
+    ``step_index`` optionally anchors this evidence to a point in the experiment's own protocol
+    (``Experiment.steps``) - e.g. a characterization measurement taken right after a specific
+    process step, rather than a general end-of-experiment result. Follow stays decoupled from
+    whatever step model a caller actually uses (StructureForge or otherwise): this is a bare,
+    caller-interpreted index, not validated or resolved here.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -95,6 +101,7 @@ class Evidence(BaseModel):
     description: str
     source: str
     checksum: str | None = None
+    step_index: int | None = None
     metrics: dict[str, Quantity] = Field(default_factory=dict)
     collected_at: datetime | None = None
 

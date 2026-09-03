@@ -35,6 +35,15 @@ def test_evidence_is_frozen():
         evidence.description = "mutated"
 
 
+def test_evidence_step_index_defaults_to_none_and_round_trips_when_set():
+    without_step = Evidence(id="ev1", description="photo", source="file:///x")
+    assert without_step.step_index is None
+
+    with_step = Evidence(id="ev2", description="mesure de perf", source="file:///y", step_index=2)
+    assert with_step.step_index == 2
+    assert Evidence.model_validate(with_step.model_dump(mode="json")).step_index == 2
+
+
 def test_objective_result_is_frozen():
     result = ObjectiveResult(objective="Rise", status="met")
     with pytest.raises(ValidationError):
