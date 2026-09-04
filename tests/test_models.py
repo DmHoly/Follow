@@ -44,6 +44,41 @@ def test_evidence_step_index_defaults_to_none_and_round_trips_when_set():
     assert Evidence.model_validate(with_step.model_dump(mode="json")).step_index == 2
 
 
+def test_evidence_kind_defaults_to_standard_with_empty_narrative_and_typed_fields():
+    evidence = Evidence(id="ev1", description="photo", source="file:///x")
+    assert evidence.kind == "standard"
+    assert evidence.objective is None
+    assert evidence.interpretation is None
+    assert evidence.graph_config is None
+    assert evidence.image_annotations == []
+
+
+def test_evidence_narrative_and_typed_fields_round_trip_through_json():
+    image_evidence = Evidence(
+        id="ev2",
+        description="SEM du bord",
+        source="file:///sem.png",
+        kind="image",
+        objective="Isolation electrique",
+        interpretation="Le defaut observe explique la fuite mesuree",
+        image_annotations=[{"attachment_id": "att_1", "type": "arrow", "x": 10.0, "y": 20.0, "x2": 15.0, "y2": 25.0, "label": "defaut ici"}],
+    )
+    restored = Evidence.model_validate(image_evidence.model_dump(mode="json"))
+    assert restored == image_evidence
+    assert restored.image_annotations[0]["label"] == "defaut ici"
+
+    graph_evidence = Evidence(
+        id="ev3",
+        description="Split vs PL",
+        source="—",
+        kind="graph",
+        graph_config={"title": "Split vs PL", "x_label": "Epaisseur (nm)", "y_label": "Intensite PL", "query": "TODO", "data_source_url": None},
+    )
+    restored_graph = Evidence.model_validate(graph_evidence.model_dump(mode="json"))
+    assert restored_graph == graph_evidence
+    assert restored_graph.graph_config["query"] == "TODO"
+
+
 def test_objective_result_is_frozen():
     result = ObjectiveResult(objective="Rise", status="met")
     with pytest.raises(ValidationError):

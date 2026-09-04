@@ -93,6 +93,17 @@ class Evidence(BaseModel):
     process step, rather than a general end-of-experiment result. Follow stays decoupled from
     whatever step model a caller actually uses (StructureForge or otherwise): this is a bare,
     caller-interpreted index, not validated or resolved here.
+
+    ``kind`` distinguishes a plain measurement from richer forms a caller may build a dedicated
+    editor/renderer for - ``"image"`` (a picture, optionally with ``image_annotations`` marking it
+    up) or ``"graph"`` (a plot described by ``graph_config``). ``objective`` optionally names one
+    of the experiment's own ``Objective``s this evidence speaks to, and ``interpretation`` is the
+    free-text "why this result makes sense given the change" a caller may want next to it -
+    together the intent is that a piece of evidence tells the whole small story (what changed, for
+    which goal, what was observed, why it's consistent) rather than just carrying a bare number.
+    Like ``step_index``, all of this is caller-interpreted: Follow stores it and validates nothing
+    about its shape beyond the bare field types, deliberately staying ignorant of what a "graph" or
+    an "image annotation" actually is to whichever tool renders them.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -101,6 +112,11 @@ class Evidence(BaseModel):
     description: str
     source: str
     checksum: str | None = None
+    kind: Literal["standard", "image", "graph"] = "standard"
+    objective: str | None = None
+    interpretation: str | None = None
+    graph_config: dict[str, Any] | None = None
+    image_annotations: list[dict[str, Any]] = Field(default_factory=list)
     step_index: int | None = None
     metrics: dict[str, Quantity] = Field(default_factory=dict)
     collected_at: datetime | None = None
