@@ -43,6 +43,22 @@ def test_figure_has_one_node_per_experiment_and_two_branch_labels():
     assert set(branch_trace.text) == {"⌥ main", "⌥ less-sugar"}
 
 
+def test_a_custom_dag_draws_only_the_nodes_it_names():
+    # a caller collapsing out some domain-specific notion of an "insignificant" commit (v2 here)
+    # passes its own {id: [parent_ids]} instead of the full repo.graph()
+    repo, v1_id, v2_id, fork_id = _repo_with_a_fork()
+    collapsed = {v1_id: [], fork_id: [v1_id]}  # v2 dropped, fork reattached straight to v1
+
+    fig = build_graph_figure(repo, dag=collapsed)
+    node_trace = fig.data[1]
+    assert set(node_trace.text) == {"v1", "fork"}
+
+
+def test_a_custom_dag_defaults_to_the_full_repo_graph_when_omitted():
+    repo, *_ = _repo_with_a_fork()
+    assert build_graph_figure(repo).data[1].x == build_graph_figure(repo, dag=None).data[1].x
+
+
 def test_render_graph_html_embeds_plotly_by_default(tmp_path):
     repo, v1_id, _, _ = _repo_with_a_fork()
     out = render_graph_html(repo, tmp_path / "graph.html")

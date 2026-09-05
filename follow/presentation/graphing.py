@@ -94,12 +94,20 @@ def _layout(dag: dict[str, list[str]]) -> dict[str, tuple[float, float]]:
     return positions
 
 
-def build_graph_figure(repo: "Repository") -> go.Figure:
+def build_graph_figure(repo: "Repository", *, dag: dict[str, list[str]] | None = None) -> go.Figure:
     """The full lineage graph as a Plotly figure: one marker per experiment, an edge per
     parent link, and a label at each branch tip - Follow's lightweight, dependency-light
     stand-in for a Graphviz rendering.
+
+    `dag` defaults to `repo.graph()` (every experiment in the repository). Pass a filtered or
+    contracted `{id: [parent_ids]}` mapping instead to draw a subset of the lineage - e.g. a
+    caller that only cares about some domain-specific notion of a "significant" commit can
+    collapse the rest out and reconnect the edges itself; Follow only draws whatever graph it's
+    given; nodes not present in `dag` are simply skipped, so any parent still needs its own entry
+    to be drawn (see the "a parent outside the dag is ignored" case in `_depths`).
     """
-    dag = repo.graph()
+    if dag is None:
+        dag = repo.graph()
     positions = _layout(dag)
     experiments = {exp.id: exp for exp in repo}
 
